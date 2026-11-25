@@ -1,0 +1,16 @@
+Routify
+Copyright 2026 Routify contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Routify is based on VPN Hotspot version 3.0.8
+  Copyright 2018 Mygod
+  https://github.com/Mygod/VPNHotspot
+  Licensed under the Apache License, Version 2.0.
+  Changes: renamed, rebranded, and extended with a VPN page and per-device
+  speed and data limits.
+
+Routify uses Xray-core for VLESS/VMess connections
+  https://github.com/XTLS/Xray-core
+  Licensed under the Mozilla Public License 2.0.
+  Any modified Xray-core source files must be published under the MPL 2.0.

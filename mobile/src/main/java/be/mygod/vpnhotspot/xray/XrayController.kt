@@ -1,13 +1,16 @@
 package be.mygod.vpnhotspot.xray
 
 import android.content.Context
+import android.os.Build
 import android.os.Process
 import be.mygod.vpnhotspot.App.Companion.app
 import be.mygod.vpnhotspot.limits.RunShell
 import be.mygod.vpnhotspot.root.RootManager
 import dalvik.system.BaseDexClassLoader
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -58,13 +61,39 @@ object XrayController {
         .put("outbounds", JSONArray().put(server.outbound()))
         .toString()
 
+
+    /**
+     * The Xray binary ships gzip-compressed inside the APK as lib/<abi>/libxraygz.so (a gzip file, not an ELF),
+     * so each CPU type only carries its own copy and the APK stays small. It is unpacked once into app data.
+     */
+    private fun prepareBinary(): String? {
+        val info = app.applicationInfo
+        val stamp = File(dir, "xray-bin.stamp")
+        val out = File(dir, "xray-bin")
+        java.util.zip.ZipFile(info.sourceDir).use { zip ->
+            val abi = Build.SUPPORTED_ABIS.firstOrNull { zip.getEntry("lib/$it/libxraygz.so") != null } ?: return null
+            val want = abi + ":" + app.packageManager.getPackageInfo(app.packageName, 0).lastUpdateTime
+            if (!out.exists() || !stamp.exists() || stamp.readText() != want) {
+                val tmp = File(dir, "xray-bin.tmp")
+                java.util.zip.GZIPInputStream(zip.getInputStream(zip.getEntry("lib/$abi/libxraygz.so"))).use { input ->
+                    tmp.outputStream().use { input.copyTo(it) }
+                }
+                tmp.setReadable(true, false)
+                tmp.setExecutable(true, false)
+                if (!tmp.renameTo(out)) { tmp.delete(); return null }
+                stamp.writeText(want)
+            }
+        }
+        return out.absolutePath
+    }
+
     private fun linker() = if (Process.is64Bit()) "/system/bin/linker64" else "/system/bin/linker"
 
     private fun quote(s: String) = "'" + s.replace("'", "'\\''") + "'"
 
     /** [ifaces] are the active hotspot interfaces whose clients get proxied. */
     suspend fun start(server: XrayServer, ifaces: Collection<String>) {
-        val lib = (app.classLoader as BaseDexClassLoader).findLibrary("xray")
+        val lib = withContext(Dispatchers.IO) { prepareBinary() }
         if (lib == null) { _message.value = "Xray engine missing from this build"; return }
         if (ifaces.isEmpty()) { _message.value = "Start the hotspot first"; return }
         val cfg = android.util.Base64.encodeToString(config(server).toByteArray(), android.util.Base64.NO_WRAP)

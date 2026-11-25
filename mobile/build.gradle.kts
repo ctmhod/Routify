@@ -244,19 +244,34 @@ android {
         buildConfig = true
         compose = true
     }
+    signingConfigs {
+        create("routify") {
+            val ksPath = System.getenv("ROUTIFY_KEYSTORE_PATH")
+            if (ksPath != null) {
+                storeFile = file(ksPath)
+                storePassword = System.getenv("ROUTIFY_KEY_PASSWORD")
+                keyAlias = "routify"
+                keyPassword = System.getenv("ROUTIFY_KEY_PASSWORD")
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+        }
+    }
     buildTypes {
         debug {
             isPseudoLocalesEnabled = true
         }
         release {
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (System.getenv("ROUTIFY_KEYSTORE_PATH") != null) signingConfigs.getByName("routify") else signingConfigs.getByName("debug")
             isMinifyEnabled = true
             // BuildGit already records the commit; AGP's VCS tag task fails when Git packs branch refs.
             vcsInfo.include = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
+    packaging.jniLibs.keepDebugSymbols += "**/libxray.so"
     packaging.resources.excludes += listOf(
         "**/*.kotlin_*",
         "META-INF/versions/**",

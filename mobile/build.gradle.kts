@@ -102,6 +102,8 @@ abstract class BuildDaemonNativeLibsTask : DefaultTask() {
         val targets = listOf(
             "arm64-v8a" to "aarch64-linux-android",
             "armeabi-v7a" to "armv7-linux-androideabi",
+            "x86" to "i686-linux-android",
+            "x86_64" to "x86_64-linux-android",
         )
         for ((abi, target) in targets) {
             val command = mutableListOf("cargo", "ndk", "--target", abi, "--platform", androidPlatform.get().toString(),
@@ -227,14 +229,14 @@ android {
         minSdk = 29
         targetSdk = 37
         versionCode = 2011
-        versionName = "0.1.2"
+        versionName = "0.1.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     splits {
         abi {
             isEnable = true
             reset()
-            include("arm64-v8a", "armeabi-v7a")
+            include("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
             isUniversalApk = true
         }
     }

@@ -18,9 +18,7 @@ import org.gradle.jvm.tasks.Jar
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
-    alias(libs.plugins.crashlytics)
     alias(libs.plugins.ksp)
-    alias(libs.plugins.google.services)
     alias(libs.plugins.kotlin.parcelize)
     alias(libs.plugins.wire)
     id("com.google.android.gms.oss-licenses-plugin")
@@ -227,7 +225,7 @@ android {
     }
     compileSdk = 37
     defaultConfig {
-        applicationId = "be.mygod.vpnhotspot"
+        applicationId = "app.routify"
         minSdk = 29
         targetSdk = 37
         versionCode = 2011
@@ -366,8 +364,6 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(libs.browser)
     implementation(libs.core)
-    implementation(libs.firebase.analytics)
-    implementation(libs.firebase.crashlytics)
     implementation(libs.hiddenapibypass)
     implementation(libs.ktor.io.jvm)
     implementation(libs.kotlinx.collections.immutable)

@@ -27,20 +27,12 @@ import androidx.core.content.getSystemService
 import be.mygod.librootkotlinx.NoShellException
 import be.mygod.vpnhotspot.room.AppDatabase
 import be.mygod.vpnhotspot.root.RootManager
-import be.mygod.vpnhotspot.util.CrashlyticsKeyProvider
 import be.mygod.vpnhotspot.util.DeviceStorageApp
 import be.mygod.vpnhotspot.util.InPlaceExecutor
 import be.mygod.vpnhotspot.util.Services
 import be.mygod.vpnhotspot.util.getRootCause
 import be.mygod.vpnhotspot.util.privateLookup
 import be.mygod.vpnhotspot.widget.SmartSnackbar
-import com.google.android.gms.dynamite.DynamiteModule
-import com.google.firebase.analytics.FirebaseAnalytics
-import com.google.firebase.analytics.ParametersBuilder
-import com.google.firebase.analytics.logEvent
-import com.google.firebase.crashlytics.CustomKeysAndValues
-import com.google.firebase.crashlytics.FirebaseCrashlytics
-import com.google.firebase.provider.FirebaseInitProvider
 import kotlinx.coroutines.DEBUG_PROPERTY_NAME
 import kotlinx.coroutines.DEBUG_PROPERTY_VALUE_ON
 import kotlinx.coroutines.GlobalScope
@@ -70,52 +62,12 @@ class App : Application() {
         deviceStorage.moveDatabaseFrom(this, AppDatabase.DB_NAME)
         Services.init { this }
 
-        DynamiteModule::class.java.getDeclaredField("zzg").apply { isAccessible = true }.set(null, false)
-        // call super.attachInfo get around ProviderInfo check
-        FirebaseInitProvider::class.java.privateLookup().findSpecial(ContentProvider::class.java, "attachInfo",
-            MethodType.methodType(Void.TYPE, Context::class.java, ProviderInfo::class.java),
-            FirebaseInitProvider::class.java).bindTo(FirebaseInitProvider()).invokeWithArguments(deviceStorage, null)
-        val isDebug = try {
-            when {
-                packageManager.hasSigningCertificate(packageName, byteArrayOf(0x72, 0x4f, 0xff.toByte(), 0xe1.toByte(), 0x7e, 0x11, 0x88.toByte(), 0x53, 0x3c, 0x0d, 0x6a, 0x7a, 0xf3.toByte(), 0xc1.toByte(), 0xdc.toByte(), 0x12, 0x94.toByte(), 0x7c, 0xb5.toByte(), 0x54, 0x32, 0x3a, 0xf2.toByte(), 0xb1.toByte(), 0x87.toByte(), 0xc1.toByte(), 0xf5.toByte(), 0xec.toByte(), 0x19, 0x63, 0xf2.toByte(), 0xb7.toByte()), PackageManager.CERT_INPUT_SHA256) -> false
-                packageManager.hasSigningCertificate(packageName, byteArrayOf(0x60, 0xca.toByte(), 0x99.toByte(), 0x8a.toByte(), 0x3d, 0xba.toByte(), 0xde.toByte(), 0x0a, 0xa7.toByte(), 0xe2.toByte(), 0x8e.toByte(), 0x55, 0x23, 0x6b, 0x08, 0x22, 0x9c.toByte(), 0xdd.toByte(), 0xe1.toByte(), 0xb3.toByte(), 0x76, 0xf7.toByte(), 0x47, 0x43, 0x23, 0x8b.toByte(), 0xad.toByte(), 0x2f, 0x25, 0x44, 0xc8.toByte(), 0x1a), PackageManager.CERT_INPUT_SHA256) -> true
-                else -> null
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-        FirebaseCrashlytics.getInstance().apply {
-            if (isDebug != null) {
-                setCustomKey("debug", isDebug)
-                setCustomKey("git", BuildGit.VALUE)
-                setCustomKey("uname.release", Os.uname().release)
-                setCustomKey("build", Build.DISPLAY)
-                setCustomKey("ro.vendor.api_level", SystemProperties.get("ro.vendor.api_level", ""))
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    setCustomKey("extension_s", SdkExtensions.getExtensionVersion(Build.VERSION_CODES.S))
-                }
-            } else isCrashlyticsCollectionEnabled = false
-        }
         Timber.plant(object : Timber.DebugTree() {
             @SuppressLint("LogNotTimber")
             override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
                 if (t == null) {
                     if (priority != Log.DEBUG || BuildConfig.DEBUG) Log.println(priority, tag, message)
-                    FirebaseCrashlytics.getInstance().log("${"XXVDIWEF".getOrElse(priority) { 'X' }}/$tag: $message")
-                } else {
-                    if (priority >= Log.WARN || priority == Log.DEBUG) Log.println(priority, tag, message)
-                    if (priority >= Log.INFO && t !is NoShellException) {
-                        val crashlyticsKeys = (t as? CrashlyticsKeyProvider)?.crashlyticsKeys
-                            ?: (t.getRootCause() as? ServiceSpecificException)?.let {
-                                CustomKeysAndValues.Builder()
-                                    .putInt("android.serviceSpecific.errorCode", it.errorCode)
-                                    .build()
-                            }
-                        if (crashlyticsKeys == null) FirebaseCrashlytics.getInstance().recordException(t)
-                        else FirebaseCrashlytics.getInstance().recordException(t, crashlyticsKeys)
-                    }
-                }
+                } else if (priority >= Log.WARN || priority == Log.DEBUG) Log.println(priority, tag, message)
             }
         })
         StrictMode.setThreadPolicy(StrictMode.ThreadPolicy.Builder().apply {
@@ -148,10 +100,8 @@ class App : Application() {
      * logException is inappropriate sometimes because it flushes all logs that could be used to investigate other bugs.
      */
     fun logEvent(@Size(min = 1L, max = 40L) event: String, block: ParametersBuilder.() -> Unit = { }) {
-        FirebaseAnalytics.getInstance(app).logEvent(event) {
-            block(this)
-            Timber.i(if (bundle.isEmpty) event else "$event, extras: $bundle")
-        }
+        val params = ParametersBuilder().apply(block)
+        Timber.i(if (params.bundle.isEmpty) event else "$event, extras: ${params.bundle}")
     }
 
     /**
@@ -192,4 +142,9 @@ class App : Application() {
             }.build())
         }.build()
     }
+}
+
+class ParametersBuilder {
+    val bundle = android.os.Bundle()
+    fun param(key: String, value: String) = bundle.putString(key, value)
 }

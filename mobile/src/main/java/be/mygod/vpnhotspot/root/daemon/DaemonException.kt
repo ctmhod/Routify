@@ -1,8 +1,6 @@
 package be.mygod.vpnhotspot.root.daemon
 
 import android.os.RemoteException
-import be.mygod.vpnhotspot.util.CrashlyticsKeyProvider
-import com.google.firebase.crashlytics.CustomKeysAndValues
 import java.io.IOException
 
 class DaemonException(
@@ -10,7 +8,7 @@ class DaemonException(
     private val callId: Long? = null,
     private val daemonClassName: String = "vpnhotspotd",
     cause: Throwable = ReportException(report, daemonClassName),
-) : RemoteException(report.toExceptionMessage()), CrashlyticsKeyProvider {
+) : RemoteException(report.toExceptionMessage()) {
     companion object {
         private val INVALID_CRASHLYTICS_KEY_CHAR = Regex("[^A-Za-z0-9_.-]")
 
@@ -42,8 +40,4 @@ class DaemonException(
 
     fun withCurrentTrace() = DaemonException(report, callId, daemonClassName, cause = this)
 
-    override val crashlyticsKeys get() = CustomKeysAndValues.Builder().apply {
-        for (detail in report.details) putString("daemon.${sanitizeCrashlyticsKey(detail.key)}", detail.value_)
-        if (callId != null) putString("daemon.callId", callId.toString())
-    }.build()
 }

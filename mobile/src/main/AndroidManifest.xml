@@ -224,8 +224,6 @@
                 android:resource="@xml/log_paths" />
         </provider>
 
-        <provider android:name="com.google.firebase.provider.FirebaseInitProvider"
-                  tools:node="remove"/>
         <activity android:name="com.google.android.gms.oss.licenses.OssLicensesMenuActivity"
                   tools:node="remove"/>
         <activity android:name="com.google.android.gms.oss.licenses.OssLicensesActivity"

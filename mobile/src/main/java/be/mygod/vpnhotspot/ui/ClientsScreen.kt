@@ -219,6 +219,7 @@ private fun ClientRow(
     val menuScrollState = rememberScrollState()
     var editingNickname by rememberSaveable(client.mac.toString()) { mutableStateOf(false) }
     var statsSheet by remember { mutableStateOf<ClientStats?>(null) }
+    var editingLimits by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val icon = client.icon
 
@@ -255,6 +256,14 @@ private fun ClientRow(
                 onClick = {
                     expanded = false
                     onToggleBlocked()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Speed and data limits") },
+                leadingIcon = { MenuItemIcon(R.drawable.ic_auto_timer) },
+                onClick = {
+                    expanded = false
+                    editingLimits = true
                 },
             )
             DropdownMenuItem(
@@ -329,6 +338,13 @@ private fun ClientRow(
                     Text(stringResource(android.R.string.cancel))
                 }
             },
+        )
+    }
+    if (editingLimits) {
+        ClientLimitsDialog(
+            mac = client.macString.lowercase(),
+            deviceName = if (nickname.isNotEmpty()) nickname.text else client.macString,
+            onDismiss = { editingLimits = false },
         )
     }
     statsSheet?.let { stats ->

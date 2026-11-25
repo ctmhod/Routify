@@ -346,6 +346,11 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
                 )
             }
         }
+        preferenceGroup(key = "routify_limits") {
+            row("routify_limits_defaults") {
+                DefaultLimitsRow()
+            }
+        }
         preferenceGroup(title = R.string.settings_help) {
             row(R.string.settings_misc_source) {
                 PreferenceRow(

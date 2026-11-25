@@ -35,6 +35,7 @@ import be.mygod.vpnhotspot.room.ClientRecord
 import be.mygod.vpnhotspot.room.ClientStats
 import be.mygod.vpnhotspot.room.TrafficRecord
 import be.mygod.vpnhotspot.root.RootManager
+import be.mygod.vpnhotspot.limits.LimitsEnforcer
 import be.mygod.vpnhotspot.root.TetheringCommands
 import be.mygod.vpnhotspot.root.WifiApCommands
 import be.mygod.vpnhotspot.root.daemon.NeighbourState
@@ -311,6 +312,7 @@ class ClientViewModel : ViewModel(), DefaultLifecycleObserver {
         clients.forEachValue { result.add(it) }
         result.sortWith(compareBy<Client> { it.iface }.thenBy { it.macString })
         clientsState.value = result
+        LimitsEnforcer.updateClients(result.map { it.macString })
     }
 
     private fun updateTrafficRates(
@@ -408,6 +410,7 @@ class ClientViewModel : ViewModel(), DefaultLifecycleObserver {
     }
 
     override fun onStart(owner: LifecycleOwner) {
+        LimitsEnforcer.ensureRunning()
         startedJob = viewModelScope.launch {
             if (Services.p2p != null) launch {
                 try {

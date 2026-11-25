@@ -107,6 +107,7 @@ private enum class RootDestination(
 ) {
     Tethering("tethering", R.string.title_tethering, R.drawable.ic_wifi_tethering),
     Clients("clients", R.string.title_clients, R.drawable.ic_devices),
+    Vpn("vpn", R.string.title_vpn, R.drawable.ic_encrypted),
     Settings("settings", R.string.title_settings, R.drawable.ic_settings),
 }
 
@@ -314,6 +315,19 @@ fun VpnHotspotApp(clientViewModel: ClientViewModel) {
                     onSnackbarBottomPaddingChanged = { snackbarBottomPadding = it },
                 ) {
                     ClientsScreen(clientViewModel, snackbarHostState)
+                }
+            }
+            composable(RootDestination.Vpn.route) {
+                RootDestinationScaffold(
+                    title = R.string.app_name,
+                    selectedDestination = RootDestination.Vpn,
+                    navController = navController,
+                    validClientCount = validClientCount,
+                    activeSnackbarPadding = route == RootDestination.Vpn.route,
+                    onSnackbarStartPaddingChanged = { snackbarStartPadding = it },
+                    onSnackbarBottomPaddingChanged = { snackbarBottomPadding = it },
+                ) {
+                    VpnScreen(tetherStates.tethered + tetherStates.localOnly)
                 }
             }
             composable(RootDestination.Settings.route) {

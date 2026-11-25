@@ -277,6 +277,7 @@ android {
         "META-INF/versions/**",
     )
     lint.warning += "FullBackupContent"
+    lint.disable += "MissingTranslation"
     lint.warning += "UnsafeOptInUsageError"
     sourceSets.getByName("androidTest").assets.directories.add("$projectDir/schemas")
 }

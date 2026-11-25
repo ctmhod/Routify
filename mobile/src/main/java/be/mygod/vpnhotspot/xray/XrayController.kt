@@ -1,0 +1,125 @@
+package be.mygod.vpnhotspot.xray
+
+import android.content.Context
+import android.os.Process
+import be.mygod.vpnhotspot.App.Companion.app
+import be.mygod.vpnhotspot.limits.RunShell
+import be.mygod.vpnhotspot.root.RootManager
+import dalvik.system.BaseDexClassLoader
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+
+/**
+ * Starts and stops the bundled Xray-core binary as root and redirects hotspot TCP and DNS through it.
+ * Design: nat REDIRECT on hotspot interfaces to a dokodemo-door inbound; Xray's own outbound is marked 255
+ * and skipped by the redirect chain, so there is no loop. UDP other than DNS is not proxied yet.
+ */
+object XrayController {
+    private const val TCP_PORT = 12345
+    private const val DNS_PORT = 12346
+    private const val MARK = 255
+    private const val CHAIN = "ROUTIFY_XRAY"
+    private const val PREFS = "routify_xray"
+
+    val running: StateFlow<Boolean> get() = _running
+    private val _running = MutableStateFlow(false)
+    val message: StateFlow<String> get() = _message
+    private val _message = MutableStateFlow("Stopped")
+
+    private val dir get() = app.getDir("xray", Context.MODE_PRIVATE)
+    private val prefs get() = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    fun savedServers(): List<XrayServer> {
+        val arr = JSONArray(prefs.getString("links", "[]"))
+        return (0 until arr.length()).mapNotNull { XrayServer.parse(arr.getString(it)) }
+    }
+    fun savedLinks(): List<String> {
+        val arr = JSONArray(prefs.getString("links", "[]"))
+        return (0 until arr.length()).map { arr.getString(it) }
+    }
+    fun saveLinks(links: List<String>) = prefs.edit().putString("links", JSONArray(links).toString()).apply()
+    var selected: Int
+        get() = prefs.getInt("selected", 0)
+        set(v) = prefs.edit().putInt("selected", v).apply()
+
+    private fun config(server: XrayServer): String = JSONObject()
+        .put("log", JSONObject().put("loglevel", "warning"))
+        .put("inbounds", JSONArray()
+            .put(JSONObject().put("tag", "tcp-in").put("port", TCP_PORT).put("listen", "0.0.0.0")
+                .put("protocol", "dokodemo-door")
+                .put("settings", JSONObject().put("network", "tcp").put("followRedirect", true))
+                .put("streamSettings", JSONObject().put("sockopt", JSONObject().put("tproxy", "redirect"))))
+            .put(JSONObject().put("tag", "dns-in").put("port", DNS_PORT).put("listen", "0.0.0.0")
+                .put("protocol", "dokodemo-door")
+                .put("settings", JSONObject().put("address", "1.1.1.1").put("port", 53).put("network", "tcp,udp"))))
+        .put("outbounds", JSONArray().put(server.outbound()))
+        .toString()
+
+    private fun linker() = if (Process.is64Bit()) "/system/bin/linker64" else "/system/bin/linker"
+
+    private fun quote(s: String) = "'" + s.replace("'", "'\\''") + "'"
+
+    /** [ifaces] are the active hotspot interfaces whose clients get proxied. */
+    suspend fun start(server: XrayServer, ifaces: Collection<String>) {
+        val lib = (app.classLoader as BaseDexClassLoader).findLibrary("xray")
+        if (lib == null) { _message.value = "Xray engine missing from this build"; return }
+        if (ifaces.isEmpty()) { _message.value = "Start the hotspot first"; return }
+        val cfg = android.util.Base64.encodeToString(config(server).toByteArray(), android.util.Base64.NO_WRAP)
+        val d = dir.absolutePath
+        val rules = ifaces.joinToString("\n") { i ->
+            val q = quote(i)
+            "iptables -t nat -I PREROUTING -i $q -p tcp -j $CHAIN\n" +
+            "iptables -t nat -I PREROUTING -i $q -p udp --dport 53 -j REDIRECT --to-ports $DNS_PORT"
+        }
+        val script = """
+            umask 022
+            ${stopScript(d)}
+            echo ${quote(cfg)} | base64 -d > $d/config.json
+            cd $d
+            XRAY_LOCATION_ASSET=$d nohup ${linker()} ${quote(lib)} run -c $d/config.json > $d/xray.log 2>&1 &
+            echo ${'$'}! > $d/xray.pid
+            sleep 1
+            if ! kill -0 ${'$'}(cat $d/xray.pid) 2>/dev/null; then echo failed > $d/state; exit 1; fi
+            iptables -t nat -N $CHAIN
+            iptables -t nat -A $CHAIN -m mark --mark $MARK -j RETURN
+            for n in 10.0.0.0/8 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.168.0.0/16 224.0.0.0/4; do
+              iptables -t nat -A $CHAIN -d ${'$'}n -j RETURN
+            done
+            iptables -t nat -A $CHAIN -p tcp -j REDIRECT --to-ports $TCP_PORT
+            $rules
+            echo running > $d/state
+            chmod -R a+rX $d
+        """.trimIndent()
+        _message.value = "Starting..."
+        RootManager.use { it.execute(RunShell(script)) }
+        refresh()
+    }
+
+    suspend fun stop() {
+        RootManager.use { it.execute(RunShell(stopScript(dir.absolutePath) + "\necho stopped > ${dir.absolutePath}/state; chmod a+r ${dir.absolutePath}/state")) }
+        refresh()
+    }
+
+    private fun stopScript(d: String) = """
+        while iptables -t nat -D PREROUTING -p tcp -j $CHAIN 2>/dev/null; do :; done
+        iptables -t nat -S PREROUTING | grep -E "$CHAIN|--to-ports $DNS_PORT" | sed 's/^-A/iptables -t nat -D/' | while read -r l; do sh -c "${'$'}l"; done
+        iptables -t nat -F $CHAIN 2>/dev/null
+        iptables -t nat -X $CHAIN 2>/dev/null
+        [ -f $d/xray.pid ] && kill ${'$'}(cat $d/xray.pid) 2>/dev/null
+        rm -f $d/xray.pid
+    """.trimIndent()
+
+    fun refresh() {
+        val state = File(dir, "state").takeIf { it.exists() }?.readText()?.trim()
+        _running.value = state == "running"
+        _message.value = when (state) {
+            "running" -> "Connected"
+            "failed" -> "Failed to start. " + (File(dir, "xray.log").takeIf { it.exists() }?.readText()?.takeLast(200) ?: "")
+            else -> "Stopped"
+        }
+    }
+}
+

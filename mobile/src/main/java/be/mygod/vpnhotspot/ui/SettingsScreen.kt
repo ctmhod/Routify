@@ -359,7 +359,7 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
                     summary = stringResource(R.string.settings_misc_source_summary),
                     onClick = {
                         if (!inspectionMode) {
-                            context.launchUrl("https://github.com/Mygod/VPNHotspot/blob/master/README.md")
+                            context.launchUrl("https://github.com/ctmhod/Routify")
                         }
                     },
                 )
@@ -385,10 +385,10 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
             }
             row(R.string.settings_misc_donate) {
                 PreferenceRow(
-                    icon = R.drawable.ic_volunteer_activism,
-                    title = stringResource(R.string.settings_misc_donate),
-                    summary = stringResource(R.string.settings_misc_donate_summary),
-                    onClick = { if (!inspectionMode) context.launchUrl("https://mygod.be/donate/") },
+                    icon = R.drawable.ic_bug_report,
+                    title = "Report an issue",
+                    summary = "Bugs and feature requests on GitHub",
+                    onClick = { if (!inspectionMode) context.launchUrl("https://github.com/ctmhod/Routify/issues") },
                 )
             }
             row(OssLicensesR.string.oss_license_title) {

@@ -23,7 +23,8 @@ import java.io.File
 object XrayController {
     private const val TCP_PORT = 12345
     private const val DNS_PORT = 12346
-    private const val MARK = 255
+    /** Bit 24: outside the netId/permission bits Android netd uses in fwmark, so routing is not affected. */
+    private const val MARK = 0x1000000
     private const val CHAIN = "ROUTIFY_XRAY"
     private const val PREFS = "routify_xray"
 
@@ -47,6 +48,18 @@ object XrayController {
     var selected: Int
         get() = prefs.getInt("selected", 0)
         set(v) = prefs.edit().putInt("selected", v).apply()
+
+
+    /** Devices (MAC addresses, lower case) that skip the VPN and use the normal connection. Applies on the next Connect. */
+    fun directMacs(): Set<String> {
+        val arr = JSONArray(prefs.getString("direct_macs", "[]"))
+        return (0 until arr.length()).map { arr.getString(it).lowercase() }.toSet()
+    }
+    fun setDirect(mac: String, direct: Boolean) {
+        val m = directMacs().toMutableSet()
+        if (direct) m.add(mac.lowercase()) else m.remove(mac.lowercase())
+        prefs.edit().putString("direct_macs", JSONArray(m.toList()).toString()).apply()
+    }
 
     private fun config(server: XrayServer): String = JSONObject()
         .put("log", JSONObject().put("loglevel", "warning"))
@@ -87,6 +100,20 @@ object XrayController {
         return out.absolutePath
     }
 
+    /** Go's resolver has no resolv.conf on Android, so resolve the server name here and keep the name for SNI and Host. */
+    private fun resolve(s: XrayServer): XrayServer {
+        if (Regex("^[0-9.]+$").matches(s.host) || ':' in s.host) return s
+        val ip = try {
+            java.net.InetAddress.getAllByName(s.host).firstOrNull { it is java.net.Inet4Address }?.hostAddress
+        } catch (_: Exception) { null } ?: return s
+        val name = s.sni.ifEmpty { s.wsHost.ifEmpty { s.host } }
+        return s.copy(
+            host = ip,
+            sni = if (s.security != "none") name else s.sni,
+            wsHost = if (s.network == "ws" && s.wsHost.isEmpty()) s.host else s.wsHost,
+        )
+    }
+
     private fun linker() = if (Process.is64Bit()) "/system/bin/linker64" else "/system/bin/linker"
 
     private fun quote(s: String) = "'" + s.replace("'", "'\\''") + "'"
@@ -96,28 +123,32 @@ object XrayController {
         val lib = withContext(Dispatchers.IO) { prepareBinary() }
         if (lib == null) { _message.value = "Xray engine missing from this build"; return }
         if (ifaces.isEmpty()) { _message.value = "Start the hotspot first"; return }
-        val cfg = android.util.Base64.encodeToString(config(server).toByteArray(), android.util.Base64.NO_WRAP)
+        val resolved = withContext(Dispatchers.IO) { resolve(server) }
+        val cfg = android.util.Base64.encodeToString(config(resolved).toByteArray(), android.util.Base64.NO_WRAP)
         val d = dir.absolutePath
         val rules = ifaces.joinToString("\n") { i ->
-            val q = quote(i)
-            "iptables -t nat -I PREROUTING -i $q -p tcp -j $CHAIN\n" +
-            "iptables -t nat -I PREROUTING -i $q -p udp --dport 53 -j REDIRECT --to-ports $DNS_PORT"
+            "iptables -w -t nat -I PREROUTING -i ${quote(i)} -j $CHAIN"
         }
+        val direct = directMacs().filter { Regex("^[0-9a-f:]{17}$").matches(it) }
+            .joinToString("\n") { "iptables -w -t nat -A $CHAIN -m mac --mac-source $it -j RETURN" }
         val script = """
             umask 022
             ${stopScript(d)}
             echo ${quote(cfg)} | base64 -d > $d/config.json
             cd $d
-            XRAY_LOCATION_ASSET=$d nohup ${linker()} ${quote(lib)} run -c $d/config.json > $d/xray.log 2>&1 &
+            S=${'$'}(command -v setsid || true)
+            XRAY_LOCATION_ASSET=$d ${'$'}S nohup ${linker()} ${quote(lib)} run -c $d/config.json > $d/xray.log 2>&1 &
             echo ${'$'}! > $d/xray.pid
             sleep 1
             if ! kill -0 ${'$'}(cat $d/xray.pid) 2>/dev/null; then echo failed > $d/state; exit 1; fi
-            iptables -t nat -N $CHAIN
-            iptables -t nat -A $CHAIN -m mark --mark $MARK -j RETURN
+            iptables -w -t nat -N $CHAIN
+            $direct
+            iptables -w -t nat -A $CHAIN -p udp --dport 53 -j REDIRECT --to-ports $DNS_PORT
+            iptables -w -t nat -A $CHAIN -m mark --mark 0x1000000/0x1000000 -j RETURN
             for n in 10.0.0.0/8 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.168.0.0/16 224.0.0.0/4; do
-              iptables -t nat -A $CHAIN -d ${'$'}n -j RETURN
+              iptables -w -t nat -A $CHAIN -d ${'$'}n -j RETURN
             done
-            iptables -t nat -A $CHAIN -p tcp -j REDIRECT --to-ports $TCP_PORT
+            iptables -w -t nat -A $CHAIN -p tcp -j REDIRECT --to-ports $TCP_PORT
             $rules
             echo running > $d/state
             chmod -R a+rX $d
@@ -133,10 +164,10 @@ object XrayController {
     }
 
     private fun stopScript(d: String) = """
-        while iptables -t nat -D PREROUTING -p tcp -j $CHAIN 2>/dev/null; do :; done
-        iptables -t nat -S PREROUTING | grep -E "$CHAIN|--to-ports $DNS_PORT" | sed 's/^-A/iptables -t nat -D/' | while read -r l; do sh -c "${'$'}l"; done
-        iptables -t nat -F $CHAIN 2>/dev/null
-        iptables -t nat -X $CHAIN 2>/dev/null
+        while iptables -w -t nat -D PREROUTING -p tcp -j $CHAIN 2>/dev/null; do :; done
+        iptables -w -t nat -S PREROUTING | grep -E "$CHAIN|--to-ports $DNS_PORT" | sed 's/^-A/iptables -w -t nat -D/' | while read -r l; do sh -c "${'$'}l"; done
+        iptables -w -t nat -F $CHAIN 2>/dev/null
+        iptables -w -t nat -X $CHAIN 2>/dev/null
         [ -f $d/xray.pid ] && kill ${'$'}(cat $d/xray.pid) 2>/dev/null
         rm -f $d/xray.pid
     """.trimIndent()

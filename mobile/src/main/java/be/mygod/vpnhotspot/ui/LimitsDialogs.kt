@@ -84,6 +84,7 @@ fun ClientLimitsDialog(mac: String, deviceName: String, onDismiss: () -> Unit) {
     var quota by remember { mutableStateOf(current.quota?.toString() ?: "") }
     var rule by remember { mutableStateOf(current.rule) }
     var action by remember { mutableStateOf(current.action) }
+    var useVpn by remember { mutableStateOf(mac.lowercase() !in be.mygod.vpnhotspot.xray.XrayController.directMacs()) }
     var used by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(mac) {
         used = try {
@@ -117,6 +118,13 @@ fun ClientLimitsDialog(mac: String, deviceName: String, onDismiss: () -> Unit) {
                         OverAction.entries.map { it to it.label },
                     action,
                 ) { action = it }
+                androidx.compose.foundation.layout.Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text("Send this device through the VPN (applies next time you connect)", modifier = Modifier.weight(1f))
+                    androidx.compose.material3.Switch(checked = useVpn, onCheckedChange = { useVpn = it })
+                }
                 Text(
                     used?.let { "Used in this period: ${Formatter.formatFileSize(context, it)}" }
                         ?: "Usage counting starts once a quota is set.",
@@ -138,6 +146,7 @@ fun ClientLimitsDialog(mac: String, deviceName: String, onDismiss: () -> Unit) {
                     rule = rule,
                     action = action,
                 ))
+                be.mygod.vpnhotspot.xray.XrayController.setDirect(mac, !useVpn)
                 LimitsEnforcer.ensureRunning()
                 LimitsEnforcer.requestUpdate()
                 onDismiss()

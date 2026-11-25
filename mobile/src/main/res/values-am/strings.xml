@@ -281,7 +281,6 @@
   <string name="configuration_view">የWi‑Fi ውቅር</string>
   <string name="configuration_invalid">ምናልባት የማይሰራ ውቅር</string>
   <string name="configuration_share">በQR ኮድ አጋራ</string>
-  <string name="configuration_rejected">Android ስርዓት እንዲህ ያለ ውቅር ይرفضዳል። (logcat ይመልከቱ)</string>
   <string name="wifi_ssid">አውታረ መረብ ስም</string>
   <string name="wifi_ssid_toggle_hex">ሄክስ ማሳያ ቀይር</string>
   <string name="wifi_ssid_help">የሆትስፖት SSID በUTF-8።</string>
@@ -328,17 +327,14 @@
   <string name="wifi_advanced_mac_address_title">የማክ አድራሻ</string>
   <string name="wifi_mac_address_persistent_randomization">ቋሚ የዘፈቀደ ማድረግ፦ %s</string>
   <string name="wifi_mac_address_non_persistent_randomization">ቋሚ ያልሆነ የዘፈቀደ ማድረግ</string>
-  <string name="wifi_mac_address_help">ለAP BSSID እና MAC የዘፈቀደ ማድረግን ያዋቅሩ። Android ሁሉም-ዜሮ፣ multicast እና broadcast BSSID ይرفضዳል። ግልጽ BSSID የሚጠቀመው MAC የዘፈቀደ ማድረግ ሲጠፋ ብቻ ነው።</string>
   <string name="wifi_p2p_mac_address_help">Supplicant ሁነታ የተረጋጋ MAC አድራሻ ይዞ እንዲቆይ ወይም ያልቀጠለ randomization እንዲጠይቅ ይምረጡ።</string>
   <string name="wifi_advanced_mac_address_persistent_randomized">ቋሚ የዘፈቀደ MAC አድራሻ</string>
   <string name="wifi_hidden_network">የተደበቀ አውታረ መረብ</string>
   <string name="wifi_hidden_network_help">SSID አታስተላልፍ</string>
   <string name="wifi_max_clients">ከፍተኛው የደንበኞች ብዛት</string>
-  <string name="wifi_max_clients_help">ከAP ጋር መገናኘት የሚችሉ ከፍተኛ የደንበኞች ብዛት። ባዶ ከሆነ Android የመሣሪያውን ወይም የአገልግሎት አቅራቢውን ገደብ ይጠቀማል፤ ከገደቡ በላይ ያሉ ደንበኞች ይرفضዳሉ።</string>
   <string name="wifi_blocked_list">የታገዱ ደንበኞች ዝርዝር</string>
   <string name="wifi_blocked_list_help">ከSoft AP ጋር መገናኘት የማይችሉ MAC አድራሻዎች። የደንበኛን ኃይል መቋረጥ ድጋፍ ያስፈልጋል፤ ካልሆነ ሆትስፖቱ ባልተደገፈ ውቅር ስህተት መጀመር ሊሳካለት አይችልም።</string>
   <string name="wifi_client_user_control">የደንበኛ መገናኘት በተጠቃሚ ቁጥጥር</string>
-  <string name="wifi_client_user_control_help">ጠፍቶ፦ በታገደው ዝርዝር ውስጥ ያልሆነ ማንኛውም ደንበኛ ትክክለኛ ማረጋገጫ ካለው ሆትስፖቱ እስኪሞላ ድረስ መገናኘት ይችላል፤ የተፈቀደው ዝርዝር ይታለፋል። በርቶ፦ Android የተፈቀደና የታገደ ዝርዝሮችን በመጠቀም ደንበኞችን ይቀበላል፣ ይرفضዳል ወይም ፈቃድ ይጠይቃል። የደንበኛን ኃይል መቋረጥ ድጋፍ ያስፈልጋል።</string>
   <string name="wifi_allowed_list">የተፈቀዱ ደንበኞች ዝርዝር</string>
   <string name="wifi_client_lists_overlap_error">የMAC አድራሻ በሁለቱም የደንበኛ ዝርዝሮች ውስጥ አለ</string>
   <string name="wifi_mac_randomization_none">ዘፈቀደ ማድረግ የለም</string>

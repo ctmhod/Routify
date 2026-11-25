@@ -30,9 +30,3 @@ The app has three pages:
 Routify is licensed under the [Apache License 2.0](LICENSE).
 
 It is based on [VPN Hotspot](https://github.com/Mygod/VPNHotspot) by Mygod (Apache 2.0) and uses [Xray-core](https://github.com/XTLS/Xray-core) (MPL 2.0). See [NOTICE](NOTICE).
-
----
-
-## بالعربي
-
-Routify تطبيق أندرويد (محتاج روت) بيحوّل أي موبايل أندرويد، حتى القديم، لراوتر ذكي. بيوزّع الإنترنت كهوتسبوت أو ريبيتر، وبيحدد سرعة وباقة كل جهاز، وبيدعم سيرفرات VLESS/VMess. المشروع لسه في مرحلة التخطيط. الرخصة Apache 2.0.

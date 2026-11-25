@@ -229,7 +229,7 @@ android {
         minSdk = 29
         targetSdk = 37
         versionCode = 2011
-        versionName = "3.0.8"
+        versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     splits {
@@ -237,7 +237,7 @@ android {
             isEnable = true
             reset()
             include("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
-            isUniversalApk = false
+            isUniversalApk = true
         }
     }
     buildFeatures {

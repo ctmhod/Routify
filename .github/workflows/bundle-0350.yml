@@ -1,0 +1,29 @@
+name: Save backup bundle
+
+on:
+  workflow_dispatch:
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: backup-before-rewrite
+
+      - name: Create and verify bundle
+        run: |
+          git bundle create backup-before-rewrite.bundle --all
+          git bundle verify backup-before-rewrite.bundle
+          git rev-parse HEAD
+          git rev-list --count HEAD
+          ls -l backup-before-rewrite.bundle
+
+      - name: Upload bundle (kept 90 days)
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-before-rewrite-bundle
+          path: backup-before-rewrite.bundle
+          retention-days: 90

@@ -17,7 +17,7 @@ import java.io.File
 
 /**
  * Starts and stops the bundled Xray-core binary as root and redirects hotspot TCP and DNS through it.
- * Design: nat REDIRECT on hotspot interfaces to a dokodemo-door inbound; Xray's own outbound is marked 255
+ * Design: nat REDIRECT on hotspot interfaces to a dokodemo-door inbound; Xray's own outbound is marked with bit 24
  * and skipped by the redirect chain, so there is no loop. UDP other than DNS is not proxied yet.
  */
 object XrayController {
@@ -131,6 +131,51 @@ object XrayController {
 
     /** [ifaces] are the active hotspot interfaces whose clients get proxied. */
     suspend fun start(server: XrayServer, ifaces: Collection<String>) {
+        try {
+            startInner(server, ifaces)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            fail("Connect failed", e)
+        }
+    }
+
+    /** Never let a failure reach the UI thread: show a short message and keep a redacted log. */
+    private fun fail(what: String, e: Throwable) {
+        val text = redact(e.stackTraceToString())
+        appendLog("$what: $text")
+        _running.value = false
+        _message.value = "$what: ${e.javaClass.simpleName} ${redact(e.message ?: "")}".trim().take(300)
+    }
+
+    private fun redact(s: String) = s
+        .replace(Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"), "<id>")
+        .replace(Regex("(?i)(vless|vmess)://\\S+"), "<link>")
+
+    fun appendLog(line: String) {
+        try {
+            val f = File(dir, "app-error.log")
+            val old = if (f.exists()) f.readText().takeLast(6000) else ""
+            f.writeText(old + java.util.Date() + " " + line.take(3000) + "\n")
+        } catch (_: Throwable) { }
+    }
+    fun readLog(): String = try { File(dir, "app-error.log").takeIf { it.exists() }?.readText().orEmpty() } catch (_: Throwable) { "" }
+    fun clearLog() { try { File(dir, "app-error.log").delete(); File(dir, "crash.log").delete() } catch (_: Throwable) { } }
+    fun crashLog(): String = try { File(dir, "crash.log").takeIf { it.exists() }?.readText().orEmpty() } catch (_: Throwable) { "" }
+
+    private var crashHandlerSet = false
+    /** Records any crash of the app to a file (redacted), so the next start can show it. */
+    fun installCrashLog() {
+        if (crashHandlerSet) return
+        crashHandlerSet = true
+        val prev = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { th, e ->
+            try { File(dir, "crash.log").writeText(java.util.Date().toString() + "\n" + redact(e.stackTraceToString()).take(6000)) } catch (_: Throwable) { }
+            prev?.uncaughtException(th, e)
+        }
+    }
+
+    private suspend fun startInner(server: XrayServer, ifaces: Collection<String>) {
         val lib = withContext(Dispatchers.IO) { prepareBinary() }
         if (lib == null) { _message.value = "Xray engine missing from this build"; return }
         if (ifaces.isEmpty()) { _message.value = "Start the hotspot first"; return }
@@ -170,8 +215,14 @@ object XrayController {
     }
 
     suspend fun stop() {
-        RootManager.use { it.execute(RunShell(stopScript(dir.absolutePath) + "\necho stopped > ${dir.absolutePath}/state; chmod a+r ${dir.absolutePath}/state")) }
-        refresh()
+        try {
+            RootManager.use { it.execute(RunShell(stopScript(dir.absolutePath) + "\necho stopped > ${dir.absolutePath}/state; chmod a+r ${dir.absolutePath}/state")) }
+            refresh()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            fail("Disconnect failed", e)
+        }
     }
 
     private fun stopScript(d: String) = """
@@ -183,12 +234,14 @@ object XrayController {
         rm -f $d/xray.pid
     """.trimIndent()
 
-    fun refresh() {
+    fun refresh() = try { refreshInner() } catch (e: Throwable) { _message.value = "Status unavailable" }
+
+    private fun refreshInner() {
         val state = File(dir, "state").takeIf { it.exists() }?.readText()?.trim()
         _running.value = state == "running"
         _message.value = when (state) {
             "running" -> "Connected"
-            "failed" -> "Failed to start. " + (File(dir, "xray.log").takeIf { it.exists() }?.readText()?.takeLast(200) ?: "")
+            "failed" -> "Failed to start. " + redact(File(dir, "xray.log").takeIf { it.exists() }?.readText()?.takeLast(300) ?: "")
             else -> "Stopped"
         }
     }

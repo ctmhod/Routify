@@ -27,7 +27,8 @@ fun VpnScreen(hotspotIfaces: Collection<String>) {
     var selected by remember { mutableIntStateOf(XrayController.selected) }
     val running by XrayController.running.collectAsState()
     val status by XrayController.message.collectAsState()
-    LaunchedEffect(Unit) { XrayController.refresh() }
+    var logText by remember { mutableStateOf(XrayController.crashLog() + XrayController.readLog()) }
+    LaunchedEffect(Unit) { XrayController.installCrashLog(); XrayController.refresh() }
     val servers = links.map { XrayServer.parse(it) }
 
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -68,10 +69,32 @@ fun VpnScreen(hotspotIfaces: Collection<String>) {
                     }
                     Button(enabled = running || servers.getOrNull(selected) != null, onClick = {
                         scope.launch {
-                            if (running) XrayController.stop()
-                            else servers.getOrNull(selected)?.let { XrayController.start(it, hotspotIfaces) }
+                            try {
+                                if (running) XrayController.stop()
+                                else servers.getOrNull(selected)?.let { XrayController.start(it, hotspotIfaces) }
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
+                            } catch (e: Throwable) {
+                                XrayController.appendLog("UI: " + e.stackTraceToString())
+                            }
+                            logText = XrayController.crashLog() + XrayController.readLog()
                         }
                     }) { Text(if (running) "Disconnect" else "Connect") }
+                }
+            }
+        }
+        if (logText.isNotBlank()) item {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp)) {
+                    Text("Error log (ids and links are hidden)", style = MaterialTheme.typography.titleSmall)
+                    Text(logText.takeLast(1500), style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = {
+                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("Routify log", logText))
+                        }) { Text("Copy") }
+                        TextButton(onClick = { XrayController.clearLog(); logText = "" }) { Text("Clear") }
+                    }
                 }
             }
         }

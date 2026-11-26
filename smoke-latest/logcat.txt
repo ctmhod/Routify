@@ -1,1 +1,0 @@
-11-26 16:20:14.266  8094  8112 I app.routify: Explicit concurrent copying GC freed 50054(1953KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 5325KB/10MB, paused 10us total 10.606ms

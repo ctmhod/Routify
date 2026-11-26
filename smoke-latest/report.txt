@@ -1,26 +1,34 @@
 tethering: Repeater, Temporary Wi‑Fi hotspot, Static IP, Manage system tethering…, Wi‑Fi hotspot, USB tethering, Bluetooth tethering, Ethernet tethering, Routify, Tethering, Clients, VPN
-Clients: Repeater, Temporary Wi‑Fi hotspot, Static IP, Manage system tethering…, Wi‑Fi hotspot, USB tethering, Bluetooth tethering, Ethernet tethering, Routify, Tethering, Clients, VPN, Settings
-VPN: Repeater, Temporary Wi‑Fi hotspot, Static IP, Manage system tethering…, Wi‑Fi hotspot, USB tethering, Bluetooth tethering, Ethernet tethering, Routify, Tethering, Clients, VPN, Settings
-Settings: Repeater, Temporary Wi‑Fi hotspot, Static IP, Manage system tethering…, Wi‑Fi hotspot, USB tethering, Bluetooth tethering, Ethernet tethering, Routify, Tethering, Clients, VPN, Settings
+nav Clients tap 405,2070
+Clients: No clients connected, Routify, Tethering, Clients, VPN, Settings, Root shell is not available
+nav VPN tap 675,2070
+VPN: Paste vless:// or vmess:// link, Paste, Add, VPN is off, Stopped, Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)., Connect, Mode, Auto, Root, Proxy, No root found. Auto uses proxy mode., Proxy address for other devices, HTTP (Wi-Fi proxy)  10.0.2.15:8080
+nav Settings tap 945,2070
+Settings: Clean/reapply routing rules, Update changed settings to current active services. Can also fix rare race conditions, Upstream, Upstream network interface, Auto detect system VPN (current: ∅), Fallback upstream interface, Auto detect system default network (current: wlan0), Downstream, IPv4 masquerade mode, Simple, IPv6 mode, Block, Tethering hardware acceleration, Shortcut to system Developer options. Turning this off is often needed for VPN tethering over system tethering, but it can reduce battery life while tethering is active
 OK tabs
-NOT FOUND: Add
-vpn after add: Configuration method, Framework, Network name, Network name, Password, Turn off hotspot automatically, When no devices are connected for the shutdown timeout: Default (10m), AP Band, AP channel/band, 2.4/5 GHz Band, Advanced options, Wi‑Fi configuration
-NOT FOUND: Proxy
-NOT FOUND: Connect
-vpn connected: Configuration method, Framework, Network name, Network name, Password, Turn off hotspot automatically, When no devices are connected for the shutdown timeout: Default (10m), AP Band, AP channel/band, 2.4/5 GHz Band, Advanced options, Wi‑Fi configuration
-listen: Cannot open netlink socket: Permission denied
+nav VPN tap 675,2070
+vpn after add: Paste vless:// or vmess:// link, Paste, Add, VPN is off, Stopped, Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)., Connect, Mode, Auto, Root, Proxy, No root found. Auto uses proxy mode., Proxy address for other devices, HTTP (Wi-Fi proxy)  10.0.2.15:8080, Copy, Routify, Tethering, Clients, VPN, Settings
+vpn connected: Paste vless:// or vmess:// link, Paste, Add, VPN is on, Proxy on (HTTP 8080, SOCKS 1080), Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)., Disconnect, Mode, Auto, Root, Proxy, No root found. Auto uses proxy mode., Proxy address for other devices, HTTP (Wi-Fi proxy)  10.0.2.15:8080, Copy, Routify, Tethering, Clients, VPN, Settings
+listen: LISTEN      0      0            *:8080                     *:*                  
+LISTEN      0      0            *:1080                     *:*                  
+Cannot open netlink socket: Permission denied
 
-NOT FOUND: Disconnect
-after disconnect: Configuration method, Framework, Network name, Network name, Password, Turn off hotspot automatically, When no devices are connected for the shutdown timeout: Default (10m), AP Band
+after disconnect: Paste vless:// or vmess:// link, Paste, Add, VPN is off, Stopped, Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)., Connect, Mode
 listen after: Cannot open netlink socket: Permission denied
 
 OK vpn
-NOT FOUND: Settings
-settings page0: Configuration method, Framework, Network name, Network name, Password, Turn off hotspot automatically, When no devices are connected for the shutdown timeout: Default (10m), AP Band, AP channel/band, 2.4/5 GHz Band, Advanced options, Wi‑Fi configuration
-settings page1: Configuration method, Framework, Network name, Network name, Password, Turn off hotspot automatically, When no devices are connected for the shutdown timeout: Default (10m), AP Band, AP channel/band, 2.4/5 GHz Band, Advanced options, Wi‑Fi configuration
+nav Settings tap 945,2070
+settings page0: Paste vless:// or vmess:// link, Paste, Add, VPN is off, Stopped, Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)., Connect, Mode, Auto, Root, Proxy, No root found. Auto uses proxy mode., Proxy address for other devices, HTTP (Wi-Fi proxy)  10.0.2.15:8080, Copy, Routify, Tethering, Clients, VPN, Settings
+settings page1: hi, Paste vless:// or vmess:// link, Paste, Add, VPN is off, Stopped, Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)., Connect, Mode, Auto, Root, Proxy, No root found. Auto uses proxy mode., Proxy address for other devices, HTTP (Wi-Fi proxy)  10.0.2.15:8080, Copy, Routify, Tethering, Clients, VPN, Settings
+settings page2: hi by, Paste vless:// or vmess:// link, Paste, Add, VPN is off, Stopped, Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)., Connect, Mode, Auto, Root, Proxy, No root found. Auto uses proxy mode., Proxy address for other devices, HTTP (Wi-Fi proxy)  10.0.2.15:8080, Copy, Routify, Tethering, Clients, VPN, Settings
+settings page3: hi by by, Paste vless:// or vmess:// link, Paste, Add, VPN is off, Stopped, Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)., Connect, Mode, Auto, Root, Proxy, No root found. Auto uses proxy mode., Proxy address for other devices, HTTP (Wi-Fi proxy)  10.0.2.15:8080, Copy, Routify, Tethering, Clients, VPN, Settings
+settings page4: hi by by go, Paste vless:// or vmess:// link, Paste, Add, VPN is off, Stopped, Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)., Connect, Mode, Auto, Root, Proxy, No root found. Auto uses proxy mode., Proxy address for other devices, HTTP (Wi-Fi proxy)  10.0.2.15:8080, Copy, Routify, Tethering, Clients, VPN, Settings
+settings page5: hi by by go get, Paste vless:// or vmess:// link, Paste, Add, VPN is off, Stopped, Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)., Connect, Mode, Auto, Root, Proxy, No root found. Auto uses proxy mode., Proxy address for other devices, HTTP (Wi-Fi proxy)  10.0.2.15:8080, Copy, Routify, Tethering, Clients, VPN, Settings
+settings page6: hi by by go get go, Paste vless:// or vmess:// link, Paste, Add, VPN is off, Stopped, Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)., Connect, Mode, Auto, Root, Proxy, No root found. Auto uses proxy mode., Proxy address for other devices, HTTP (Wi-Fi proxy)  10.0.2.15:8080, Copy, Routify, Tethering, Clients, VPN, Settings
+settings page7: hi by by go get go go, Paste vless:// or vmess:// link, Paste, Add, VPN is off, Stopped, Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)., Connect, Mode, Auto, Root, Proxy, No root found. Auto uses proxy mode., Proxy address for other devices, HTTP (Wi-Fi proxy)  10.0.2.15:8080, Copy, Routify, Tethering, Clients, VPN, Settings
 OK settings
 NOT FOUND: Error log
-errlog: Configuration method, Framework, Network name, Network name, Password, Turn off hotspot automatically, When no devices are connected for the shutdown timeout: Default (10m), AP Band, AP channel/band, 2.4/5 GHz Band, Advanced options, Wi‑Fi configuration
+errlog: hi by by go get go go go, Paste vless:// or vmess:// link, Paste, Add, VPN is off, Stopped, Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)., Connect, Mode, Auto, Root, Proxy, No root found. Auto uses proxy mode., Proxy address for other devices, HTTP (Wi-Fi proxy)  10.0.2.15:8080
 NOT FOUND: Close
 OK errlog
 NOT FOUND: Developer

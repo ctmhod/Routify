@@ -26,7 +26,7 @@ private fun ApConfigurationPreview() {
             remember {
                 ApConfigurationState(
                     SoftApConfigurationCompat(
-                        ssid = WifiSsidCompat.fromUtf8Text("VPN Hotspot"),
+                        ssid = WifiSsidCompat.fromUtf8Text("Routify"),
                         passphrase = "12345678",
                         securityType = SoftApConfiguration.SECURITY_TYPE_WPA2_PSK,
                     ),

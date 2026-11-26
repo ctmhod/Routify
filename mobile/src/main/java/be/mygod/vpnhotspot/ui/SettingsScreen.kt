@@ -698,7 +698,7 @@ private suspend fun shareLogcat(context: Context) {
     val logUri = withContext(Dispatchers.IO) {
         val logDir = File(context.cacheDir, "log")
         logDir.mkdir()
-        val logFile = File.createTempFile("vpnhotspot-", ".log", logDir)
+        val logFile = File.createTempFile("routify-", ".log", logDir)
         logFile.outputStream().use { out ->
             PrintWriter(out.bufferedWriter()).use { writer ->
                 writer.println("${BuildConfig.VERSION_CODE} is running on API ${Build.VERSION.SDK_INT}")

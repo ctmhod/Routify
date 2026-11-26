@@ -167,6 +167,8 @@ fun PreferenceGroup(
                 text = it,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelLarge,
             )
         }
         for (item in items) item()

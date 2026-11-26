@@ -353,6 +353,7 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
             row("routify_vpn_dns") { VpnDnsRow() }
             row("routify_vpn_log") { VpnLogRow() }
             row("routify_theme") { ThemeRow() }
+            row("routify_insecure") { InsecureRow() }
             row("routify_error_log") { ErrorLogRow() }
         }
         item(key = "routify_developer_group") {
@@ -760,5 +761,19 @@ private fun ThemeRow() {
         entrySummary = { null },
         onDismissRequest = { selecting = false },
         onSelect = { be.mygod.vpnhotspot.ui.theme.ThemeMode.mode = it },
+    )
+}
+
+
+@Composable
+private fun InsecureRow() {
+    var on by rememberSaveable { mutableStateOf(be.mygod.vpnhotspot.xray.XrayController.allowInsecure) }
+    PreferenceSwitchRow(
+        icon = R.drawable.ic_encrypted,
+        title = "Allow untrusted server certificate",
+        summary = "Off is safer. Turn on only for your own server whose certificate is expired or self-made. Applies on the next Connect.",
+        checked = on,
+        enabled = true,
+        onCheckedChange = { on = it; be.mygod.vpnhotspot.xray.XrayController.allowInsecure = it },
     )
 }

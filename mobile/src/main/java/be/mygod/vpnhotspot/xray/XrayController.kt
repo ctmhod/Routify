@@ -190,12 +190,59 @@ object XrayController {
                 File(dir, "state").writeText("proxy")
                 _running.value = true
                 _message.value = "Proxy on (HTTP $HTTP_PORT, SOCKS $SOCKS_PORT)"
+                startWatcher()
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Throwable) {
             fail("Connect failed", e)
         }
+    }
+
+
+    /** Turns the last Xray errors into one short, plain sentence, or null when the log looks fine. */
+    fun diagnose(log: String): String? {
+        val errs = log.lines().filter { "[Error]" in it }.takeLast(8).joinToString("\n").lowercase()
+        if (errs.isEmpty()) return null
+        return when {
+            "certificate has expired" in errs -> "the server's security certificate has expired. Renew it, use a new link, or (own server only) turn on Settings > Allow untrusted server certificate."
+            "x509" in errs -> "the server's security certificate is not valid for this name."
+            "no such host" in errs || "lookup" in errs && "fail" in errs -> "the server name could not be found. Check your internet connection and the link."
+            "connection refused" in errs -> "the server refused the connection (wrong port, or the server is down)."
+            "timeout" in errs || "timed out" in errs -> "the server did not answer in time."
+            "bad handshake" in errs -> "the server rejected the web request. Check the path and host in the link."
+            "invalid user" in errs || "invalid request user" in errs || "unauthorized" in errs -> "the server does not accept this ID. Check the link."
+            else -> "the server connection is failing. See the Error log."
+        }
+    }
+
+    /** Off by default. When on, Xray accepts expired or untrusted server certificates (less safe). */
+    var allowInsecure: Boolean
+        get() = prefs.getBoolean("allow_insecure", false)
+        set(v) = prefs.edit().putBoolean("allow_insecure", v).apply()
+
+    @Volatile private var watching = false
+    @Volatile private var lastProblem: String? = null
+
+    /** While connected, watches Xray's log so a broken server shows a clear message instead of a silent "on". */
+    fun startWatcher() {
+        if (watching) return
+        watching = true
+        lastProblem = null
+        Thread {
+            try {
+                while (_running.value) {
+                    Thread.sleep(3000)
+                    val log = try { File(dir, "xray.log").takeIf { it.exists() }?.readText()?.takeLast(6000) ?: "" } catch (_: Throwable) { "" }
+                    val problem = diagnose(log)
+                    if (problem != null && problem != lastProblem) {
+                        lastProblem = problem
+                        appendLog("Server problem: $problem")
+                        _message.value = "Connected, but " + problem
+                    }
+                }
+            } catch (_: Throwable) { } finally { watching = false }
+        }.apply { isDaemon = true; name = "routify-xray-watch" }.start()
     }
 
     private fun stopProxyProcess() {
@@ -337,7 +384,7 @@ object XrayController {
 
     private fun refreshInner() {
         proxyProc?.let { p ->
-            if (p.isAlive) { _running.value = true; return }
+            if (p.isAlive) { _running.value = true; startWatcher(); return }
             proxyProc = null
         }
         var state = File(dir, "state").takeIf { it.exists() }?.readText()?.trim()
@@ -348,8 +395,10 @@ object XrayController {
             if (File(dir, "state").lastModified() < bootTime) state = "stopped"
         }
         _running.value = state == "running"
+        if (state == "running") startWatcher()
+        val prob = lastProblem
         _message.value = when (state) {
-            "running" -> if (File(dir, "udp").takeIf { it.exists() }?.readText()?.trim() == "yes") "Connected (TCP, DNS and UDP)"
+            "running" -> if (prob != null) "Connected, but " + prob else if (File(dir, "udp").takeIf { it.exists() }?.readText()?.trim() == "yes") "Connected (TCP, DNS and UDP)"
                 else "Connected (TCP and DNS; this phone's kernel has no UDP proxy support)"
             "failed" -> "Failed to start. " + redact(File(dir, "xray.log").takeIf { it.exists() }?.readText()?.takeLast(300) ?: "")
             else -> "Stopped"

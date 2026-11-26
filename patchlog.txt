@@ -1,0 +1,292 @@
+-rw-r--r-- 1 runner runner 37695 Nov 26 06:20 fg.png
+-rw-r--r-- 1 runner runner 10153 Nov 26 06:20 mono.png
+=== v0.1.3
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.1.3-arm64-v8a.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.1.3-armeabi-v7a.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.1.3-universal.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.1.3-x86.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.1.3-x86_64.apk (icon files not found as expected)
+=== v0.2.0
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.2.0-0-universal.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.2.0-arm64-v8a.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.2.0-armeabi-v7a.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.2.0-x86.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.2.0-x86_64.apk (icon files not found as expected)
+=== v0.3.1
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.1-0-universal.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.1-arm64-v8a.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.1-armeabi-v7a.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.1-x86.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.1-x86_64.apk (icon files not found as expected)
+=== v0.3.2
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.2-0-universal.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.2-arm64-v8a.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.2-armeabi-v7a.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.2-x86.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.2-x86_64.apk (icon files not found as expected)
+=== v0.3.3
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.3-0-universal.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.3-arm64-v8a.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.3-armeabi-v7a.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.3-x86.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.3-x86_64.apk (icon files not found as expected)
+=== v0.3.4
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.4-0-universal.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.4-arm64-v8a.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.4-armeabi-v7a.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.4-x86.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.4-x86_64.apk (icon files not found as expected)
+=== v0.3.5
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.5-0-universal.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.5-arm64-v8a.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.5-armeabi-v7a.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.5-x86.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.5-x86_64.apk (icon files not found as expected)
+=== v0.3.6
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.6-0-universal.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.6-arm64-v8a.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.6-armeabi-v7a.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.6-x86.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.6-x86_64.apk (icon files not found as expected)
+=== v0.3.7
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.7-0-universal.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.7-arm64-v8a.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.7-armeabi-v7a.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.7-x86.apk (icon files not found as expected)
+Traceback (most recent call last):
+  File "/home/runner/work/Routify/Routify/w/../patch.py", line 3, in <module>
+    fg, mono = open('fg.png','rb').read(), open('mono.png','rb').read()
+               ~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'fg.png'
+SKIP Routify-v0.3.7-x86_64.apk (icon files not found as expected)
+Routify v0.3.9 (early, untested)	Latest	v0.3.9	2026-11-26T06:15:31Z
+Routify v0.3.8 (early, untested)		v0.3.8	2026-11-26T05:22:15Z
+Routify v0.3.7 (early, untested)		v0.3.7	2026-11-26T05:06:55Z
+Routify v0.3.6 (early, untested)		v0.3.6	2026-11-26T04:12:48Z
+Routify v0.3.5 (early, untested)		v0.3.5	2026-11-26T04:01:00Z
+Routify v0.3.4 (early, untested)		v0.3.4	2026-11-26T03:21:48Z
+Routify v0.3.3 (early, untested)		v0.3.3	2026-11-26T00:31:49Z
+Routify v0.3.2 (early, untested)		v0.3.2	2026-11-25T22:56:23Z
+Routify v0.3.1 (early, untested)		v0.3.1	2026-11-25T22:11:25Z
+Routify v0.2.0 (early, untested)		v0.2.0	2026-11-25T20:33:25Z
+Routify v0.1.3 (early, untested)	Pre-release	v0.1.3	2026-11-25T20:12:26Z

@@ -111,7 +111,9 @@ fun VpnScreen(hotspotIfaces: Collection<String>) {
                     TextButton(onClick = {
                         links = links.filterIndexed { j, _ -> j != i }
                         XrayController.saveLinks(links)
+                        if (i < selected) selected -= 1
                         if (selected >= links.size) selected = 0
+                        XrayController.selected = selected
                     }) { Text("Remove") }
                 }
             }

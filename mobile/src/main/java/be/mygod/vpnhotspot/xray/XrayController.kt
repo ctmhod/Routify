@@ -237,7 +237,12 @@ object XrayController {
     fun refresh() = try { refreshInner() } catch (e: Throwable) { _message.value = "Status unavailable" }
 
     private fun refreshInner() {
-        val state = File(dir, "state").takeIf { it.exists() }?.readText()?.trim()
+        var state = File(dir, "state").takeIf { it.exists() }?.readText()?.trim()
+        if (state == "running") {
+            // After a reboot the state file stays behind (Xray and the iptables rules are gone). /proc is hidden from apps.
+            val bootTime = System.currentTimeMillis() - android.os.SystemClock.elapsedRealtime()
+            if (File(dir, "state").lastModified() < bootTime) state = "stopped"
+        }
         _running.value = state == "running"
         _message.value = when (state) {
             "running" -> "Connected"

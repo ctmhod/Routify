@@ -51,6 +51,17 @@ object XrayController {
 
 
     /** Devices (MAC addresses, lower case) that skip the VPN and use the normal connection. Applies on the next Connect. */
+    /** DNS server that hotspot clients use while the VPN is on (asked through the tunnel). */
+    var dnsServer: String
+        get() = prefs.getString("dns_server", null)?.takeIf { isIpv4(it) } ?: "1.1.1.1"
+        set(v) = prefs.edit().putString("dns_server", v).apply()
+    fun isIpv4(s: String) = Regex("^((25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])$").matches(s)
+    /** Xray log level: warning, info or debug. */
+    var logLevel: String
+        get() = prefs.getString("log_level", null)?.takeIf { it in LOG_LEVELS } ?: "warning"
+        set(v) = prefs.edit().putString("log_level", v).apply()
+    val LOG_LEVELS = listOf("warning", "info", "debug")
+
     fun directMacs(): Set<String> {
         val arr = JSONArray(prefs.getString("direct_macs", "[]"))
         return (0 until arr.length()).map { arr.getString(it).lowercase() }.toSet()
@@ -62,7 +73,7 @@ object XrayController {
     }
 
     private fun config(server: XrayServer): String = JSONObject()
-        .put("log", JSONObject().put("loglevel", "warning"))
+        .put("log", JSONObject().put("loglevel", logLevel))
         .put("inbounds", JSONArray()
             .put(JSONObject().put("tag", "tcp-in").put("port", TCP_PORT).put("listen", "0.0.0.0")
                 .put("protocol", "dokodemo-door")
@@ -70,7 +81,7 @@ object XrayController {
                 .put("streamSettings", JSONObject().put("sockopt", JSONObject().put("tproxy", "redirect"))))
             .put(JSONObject().put("tag", "dns-in").put("port", DNS_PORT).put("listen", "0.0.0.0")
                 .put("protocol", "dokodemo-door")
-                .put("settings", JSONObject().put("address", "1.1.1.1").put("port", 53).put("network", "tcp,udp"))))
+                .put("settings", JSONObject().put("address", dnsServer).put("port", 53).put("network", "tcp,udp"))))
         .put("outbounds", JSONArray().put(server.outbound()))
         .toString()
 

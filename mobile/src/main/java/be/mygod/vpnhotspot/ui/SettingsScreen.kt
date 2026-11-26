@@ -350,6 +350,8 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
             row("routify_limits_defaults") {
                 DefaultLimitsRow()
             }
+            row("routify_vpn_dns") { VpnDnsRow() }
+            row("routify_vpn_log") { VpnLogRow() }
         }
         preferenceGroup(title = R.string.settings_help) {
             row(R.string.settings_misc_source) {

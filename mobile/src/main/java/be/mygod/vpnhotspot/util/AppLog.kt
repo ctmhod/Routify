@@ -45,6 +45,9 @@ object AppLog {
         override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
             if (priority < Log.WARN) return
             if (message.startsWith("StrictMode")) return
+            // No root is normal for proxy mode: do not fill the log with root-search failures.
+            if (t != null && t.stackTraceToString().let { "NoShellException" in it || "Cannot run program" in it }) return
+            if ("Root shell is not available" in message || "NoShellException" in message) return
             val level = if (priority >= Log.ERROR) "E" else "W"
             add((tag ?: "app") + "/" + level, message + (t?.let { "\n" + it.stackTraceToString() } ?: ""))
         }

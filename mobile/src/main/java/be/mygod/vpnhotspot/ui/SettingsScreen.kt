@@ -395,7 +395,7 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
                 PreferenceRow(
                     icon = R.drawable.ic_bug_report,
                     title = stringResource(R.string.settings_misc_logcat),
-                    summary = stringResource(R.string.settings_misc_logcat_summary),
+                    summary = "Share the system log when you report a bug",
                     onClick = {
                         if (!inspectionMode) scope.launch {
                             try {

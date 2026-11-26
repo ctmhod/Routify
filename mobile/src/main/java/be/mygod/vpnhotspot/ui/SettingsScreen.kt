@@ -354,19 +354,43 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
             row("routify_vpn_log") { VpnLogRow() }
             row("routify_error_log") { ErrorLogRow() }
         }
-        preferenceGroup(title = R.string.settings_help) {
-            row(R.string.settings_misc_source) {
+        item(key = "routify_developer_group") {
+            PreferenceGroup(title = "Developer") {
+            row("dev_telegram") {
                 PreferenceRow(
                     icon = R.drawable.ic_star,
-                    title = stringResource(R.string.settings_misc_source),
-                    summary = stringResource(R.string.settings_misc_source_summary),
-                    onClick = {
-                        if (!inspectionMode) {
-                            context.launchUrl("https://github.com/ctmhod/Routify")
-                        }
-                    },
+                    title = "Developer",
+                    summary = "@ctmhod on Telegram",
+                    onClick = { if (!inspectionMode) context.launchUrl("https://t.me/ctmhod") },
                 )
             }
+            row("dev_source") {
+                PreferenceRow(
+                    icon = R.drawable.ic_star,
+                    title = "Source code",
+                    summary = "github.com/ctmhod/Routify",
+                    onClick = { if (!inspectionMode) context.launchUrl("https://github.com/ctmhod/Routify") },
+                )
+            }
+            row("dev_releases") {
+                PreferenceRow(
+                    icon = R.drawable.ic_star,
+                    title = "Releases",
+                    summary = "Download the latest Routify",
+                    onClick = { if (!inspectionMode) context.launchUrl("https://github.com/ctmhod/Routify/releases") },
+                )
+            }
+            row("dev_issues") {
+                PreferenceRow(
+                    icon = R.drawable.ic_star,
+                    title = "Report an issue",
+                    summary = "Bugs and feature requests on GitHub",
+                    onClick = { if (!inspectionMode) context.launchUrl("https://github.com/ctmhod/Routify/issues") },
+                )
+            }
+            }
+        }
+        preferenceGroup(title = R.string.settings_help) {
             row(R.string.settings_misc_logcat) {
                 PreferenceRow(
                     icon = R.drawable.ic_bug_report,
@@ -384,30 +408,6 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
                             }
                         }
                     },
-                )
-            }
-            row(R.string.settings_misc_donate) {
-                PreferenceRow(
-                    icon = R.drawable.ic_bug_report,
-                    title = "Report an issue",
-                    summary = "Bugs and feature requests on GitHub",
-                    onClick = { if (!inspectionMode) context.launchUrl("https://github.com/ctmhod/Routify/issues") },
-                )
-            }
-            row("routify_releases") {
-                PreferenceRow(
-                    icon = R.drawable.ic_star,
-                    title = "Releases",
-                    summary = "Download the latest Routify on GitHub",
-                    onClick = { if (!inspectionMode) context.launchUrl("https://github.com/ctmhod/Routify/releases") },
-                )
-            }
-            row("routify_developer") {
-                PreferenceRow(
-                    icon = R.drawable.ic_star,
-                    title = "Developer",
-                    summary = "@ctmhod on Telegram",
-                    onClick = { if (!inspectionMode) context.launchUrl("https://t.me/ctmhod") },
                 )
             }
             row(OssLicensesR.string.oss_license_title) {

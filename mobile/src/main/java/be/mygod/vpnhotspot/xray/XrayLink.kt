@@ -25,7 +25,8 @@ data class XrayServer(
     val shortId: String = "",
     val alterId: Int = 0,
     val vmessCipher: String = "auto",
-    val insecure: Boolean = false, // allowInsecure=1 in the link
+    val insecure: Boolean = false, // allowInsecure=1 in the link (Routify pins the server certificate instead)
+    val pin: String = "",          // pcs= in the link: SHA-256 of the server certificate
 ) {
     /** Outbound object for Xray's JSON config. */
     fun outbound(mark: Boolean = true): JSONObject {
@@ -33,7 +34,7 @@ data class XrayServer(
         val tlsName = sni.ifEmpty { wsHost.ifEmpty { host } }
         when (security) {
             "tls" -> stream.put("tlsSettings", JSONObject().put("serverName", tlsName).apply {
-                if (insecure || XrayController.allowInsecure) put("allowInsecure", true)
+                if (pin.isNotEmpty()) put("pinnedPeerCertSha256", pin)
                 // WebSocket needs HTTP/1.1, so never offer h2 for it.
                 val protos = alpn.split(',').map { it.trim() }.filter { it.isNotEmpty() && !(network == "ws" && it == "h2") }
                 if (protos.isNotEmpty()) put("alpn", JSONArray(protos))
@@ -91,7 +92,8 @@ data class XrayServer(
                 wsHost = q["host"] ?: "", path = q["path"] ?: q["serviceName"] ?: "",
                 flow = q["flow"] ?: "", alpn = q["alpn"] ?: "", fingerprint = q["fp"] ?: "",
                 publicKey = q["pbk"] ?: "", shortId = q["sid"] ?: "",
-                insecure = (q["allowInsecure"] ?: q["insecure"]) in listOf("1", "true"))
+                insecure = (q["allowInsecure"] ?: q["insecure"]) in listOf("1", "true"),
+                pin = q["pcs"] ?: "")
         }
 
         private fun parseVmess(t: String): XrayServer? {

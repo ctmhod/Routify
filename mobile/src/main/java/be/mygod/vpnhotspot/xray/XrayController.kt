@@ -127,6 +127,40 @@ object XrayController {
         )
     }
 
+
+    /**
+     * Xray 26 removed "allowInsecure". When the user allows untrusted certificates, read the certificate the server shows
+     * right now and pin it by its SHA-256 hash. That accepts an expired or self-made certificate, but only that exact one.
+     */
+    private fun pinIfNeeded(s: XrayServer): XrayServer {
+        if (s.security != "tls" || s.pin.isNotEmpty() || !(s.insecure || allowInsecure)) return s
+        return try {
+            val trustAll = object : javax.net.ssl.X509TrustManager {
+                override fun checkClientTrusted(c: Array<java.security.cert.X509Certificate>?, a: String?) {}
+                override fun checkServerTrusted(c: Array<java.security.cert.X509Certificate>?, a: String?) {}
+                override fun getAcceptedIssuers() = arrayOf<java.security.cert.X509Certificate>()
+            }
+            val ctx = javax.net.ssl.SSLContext.getInstance("TLS").apply { init(null, arrayOf(trustAll), null) }
+            val name = s.sni.ifEmpty { s.wsHost.ifEmpty { s.host } }
+            val raw = java.net.Socket()
+            raw.connect(java.net.InetSocketAddress(s.host, s.port), 8000)
+            raw.soTimeout = 8000
+            val ssl = ctx.socketFactory.createSocket(raw, name, s.port, true) as javax.net.ssl.SSLSocket
+            ssl.sslParameters = ssl.sslParameters.apply {
+                if (!Regex("^[0-9.]+$").matches(name) && ':' !in name) serverNames = listOf(javax.net.ssl.SNIHostName(name))
+            }
+            ssl.startHandshake()
+            val leaf = ssl.session.peerCertificates[0].encoded
+            ssl.close()
+            val hex = java.security.MessageDigest.getInstance("SHA-256").digest(leaf).joinToString("") { "%02x".format(it) }
+            appendLog("Untrusted certificates allowed: pinned the server certificate (${hex.take(12)}...)")
+            s.copy(pin = hex)
+        } catch (e: Throwable) {
+            appendLog("Could not read the server certificate to pin it: ${e.javaClass.simpleName}")
+            s
+        }
+    }
+
     private fun linker() = if (Process.is64Bit()) "/system/bin/linker64" else "/system/bin/linker"
 
     private fun quote(s: String) = "'" + s.replace("'", "'\\''") + "'"
@@ -171,7 +205,7 @@ object XrayController {
             val lib = withContext(Dispatchers.IO) { prepareBinary() }
             if (lib == null) { _message.value = "Xray engine missing from this build"; return }
             stopProxyProcess()
-            val resolved = withContext(Dispatchers.IO) { resolve(server) }
+            val resolved = withContext(Dispatchers.IO) { pinIfNeeded(resolve(server)) }
             withContext(Dispatchers.IO) {
                 File(dir, "config.json").writeText(config(resolved, proxy = true))
                 val pb = ProcessBuilder(lib, "run", "-c", File(dir, "config.json").absolutePath)
@@ -285,7 +319,7 @@ object XrayController {
         val lib = withContext(Dispatchers.IO) { prepareBinary() }
         if (lib == null) { _message.value = "Xray engine missing from this build"; return }
         if (ifaces.isEmpty()) { _message.value = "Start the hotspot first"; return }
-        val resolved = withContext(Dispatchers.IO) { resolve(server) }
+        val resolved = withContext(Dispatchers.IO) { pinIfNeeded(resolve(server)) }
         val cfg = android.util.Base64.encodeToString(config(resolved).toByteArray(), android.util.Base64.NO_WRAP)
         val d = dir.absolutePath
         val rules = ifaces.joinToString("\n") { i ->

@@ -771,7 +771,7 @@ private fun InsecureRow() {
     PreferenceSwitchRow(
         icon = R.drawable.ic_encrypted,
         title = "Allow untrusted server certificate",
-        summary = "Off is safer. Turn on only for your own server whose certificate is expired or self-made. Applies on the next Connect.",
+        summary = "Off is safer. On: trusts the exact certificate your server shows at Connect, even if it is expired or self-made. Use only for your own server.",
         checked = on,
         enabled = true,
         onCheckedChange = { on = it; be.mygod.vpnhotspot.xray.XrayController.allowInsecure = it },

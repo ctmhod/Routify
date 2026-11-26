@@ -228,8 +228,8 @@ android {
         applicationId = "app.routify"
         minSdk = 29
         targetSdk = 37
-        versionCode = 31400
-        versionName = "0.3.14"
+        versionCode = 31500
+        versionName = "0.3.15"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     splits {

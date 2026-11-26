@@ -224,6 +224,7 @@ object XrayController {
                 File(dir, "state").writeText("proxy")
                 _running.value = true
                 _message.value = "Proxy on (HTTP $HTTP_PORT, SOCKS $SOCKS_PORT)"
+                try { XrayService.start() } catch (e: Throwable) { appendLog("Background notification: ${e.javaClass.simpleName}") }
                 startWatcher()
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -282,6 +283,7 @@ object XrayController {
     private fun stopProxyProcess() {
         try { proxyProc?.destroy() } catch (_: Throwable) { }
         proxyProc = null
+        try { XrayService.stop() } catch (_: Throwable) { }
     }
 
     /** [ifaces] are the active hotspot interfaces whose clients get proxied. */

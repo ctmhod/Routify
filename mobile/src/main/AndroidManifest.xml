@@ -107,6 +107,14 @@
                 android:value="Keep DNS servers alive while repeater is active" />
         </service>
         <service
+            android:name=".xray.XrayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keep the local proxy running while Routify is in the background" />
+        </service>
+        <service
             android:name=".TetheringService"
             android:directBootAware="true"
             android:foregroundServiceType="specialUse">

@@ -32,7 +32,9 @@ data class XrayServer(
         val tlsName = sni.ifEmpty { wsHost.ifEmpty { host } }
         when (security) {
             "tls" -> stream.put("tlsSettings", JSONObject().put("serverName", tlsName).apply {
-                if (alpn.isNotEmpty()) put("alpn", JSONArray(alpn.split(',')))
+                // WebSocket needs HTTP/1.1, so never offer h2 for it.
+                val protos = alpn.split(',').map { it.trim() }.filter { it.isNotEmpty() && !(network == "ws" && it == "h2") }
+                if (protos.isNotEmpty()) put("alpn", JSONArray(protos))
                 if (fingerprint.isNotEmpty()) put("fingerprint", fingerprint)
             })
             "reality" -> stream.put("realitySettings", JSONObject().put("serverName", tlsName)
@@ -44,6 +46,12 @@ data class XrayServer(
                 if (wsHost.isNotEmpty()) put("headers", JSONObject().put("Host", wsHost))
             })
             "grpc" -> stream.put("grpcSettings", JSONObject().put("serviceName", path))
+            "httpupgrade" -> stream.put("httpupgradeSettings", JSONObject().put("path", path.ifEmpty { "/" }).apply {
+                if (wsHost.isNotEmpty()) put("host", wsHost)
+            })
+            "xhttp", "splithttp" -> stream.put("network", "xhttp").put("xhttpSettings", JSONObject().put("path", path.ifEmpty { "/" }).apply {
+                if (wsHost.isNotEmpty()) put("host", wsHost)
+            })
         }
         stream.put("sockopt", JSONObject().put("mark", 0x1000000))
         val settings = if (protocol == "vless") JSONObject().put("vnext", JSONArray().put(JSONObject()

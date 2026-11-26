@@ -1,0 +1,153 @@
+name: Smoke test notification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Download latest x86_64 APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --repo ctmhod/Routify --pattern '*x86_64.apk' --dir apk
+          ls -l apk
+          gh release download v0.3.15 --repo ctmhod/Routify --pattern '*x86_64.apk' --dir apk15
+          echo "APK=$(ls apk/*.apk | head -1)" >> $GITHUB_ENV
+
+      - name: Write smoke script
+        run: |
+          cat > smoke.py <<'PY_EOF'
+          import subprocess,re,time,os,shlex,xml.etree.ElementTree as ET
+          os.makedirs('smoke',exist_ok=True)
+          R=[]
+          LINK=os.environ.get('DEBUG_VLESS','').strip()
+          def red(s):
+              s=re.sub(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}','<uuid>',s)
+              s=re.sub(r'connfull[\w.\-]*','<host>',s)
+              m=re.search(r'@([^:/?#]+)',LINK)
+              if m: s=s.replace(m.group(1),'<host>')
+              s=re.sub(r'\b(?!127\.|10\.|0\.)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b','<ip>',s)
+              return s.replace(LINK,'<link>')
+          def sh(c,t=90):
+              p=subprocess.run(c,shell=True,capture_output=True,text=True,timeout=t); return (p.stdout+p.stderr)
+          def adb(c,t=90): return sh('adb '+c,t)
+          def shot(n):
+              with open(f'smoke/{n}.png','wb') as f: f.write(subprocess.run('adb exec-out screencap -p',shell=True,capture_output=True).stdout)
+          def nodes():
+              adb('shell uiautomator dump /sdcard/u.xml'); adb('pull /sdcard/u.xml smoke/ui.xml')
+              out=[]
+              for n in ET.parse('smoke/ui.xml').iter('node'):
+                  m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.get('bounds',''))
+                  if m:
+                      a=list(map(int,m.groups())); out.append((n.get('text',''),n.get('content-desc',''),((a[0]+a[2])//2,(a[1]+a[3])//2)))
+              os.remove('smoke/ui.xml'); return out
+          def texts(): return [red(t) for t,d,x in nodes() if t]
+          def tap(l):
+              for t,d,xy in nodes():
+                  if t==l or d==l:
+                      adb(f'shell input tap {xy[0]} {xy[1]}'); time.sleep(2.5); return True
+              R.append('NOT FOUND: '+l); return False
+          SZ=re.search(r'(\d+)x(\d+)',adb('shell wm size')); W,H=int(SZ.group(1)),int(SZ.group(2))
+          def nav(i): adb(f'shell input tap {int(W*(0.125+0.25*i))} {int(H*0.885)}'); time.sleep(3)
+          R.append('link present: '+str(bool(LINK)))
+          adb('logcat -c')
+          adb('shell monkey -p app.routify -c android.intent.category.LAUNCHER 1'); time.sleep(8)
+          adb('shell am force-stop app.routify'); adb('root'); time.sleep(3)
+          adb('shell mkdir -p /data/data/app.routify/shared_prefs')
+          import json,html
+          px='<?xml version="1.0" encoding="utf-8" standalone="yes" ?><map><string name="log_level">debug</string><boolean name="allow_insecure" value="true" /><string name="mode">proxy</string><int name="selected" value="0" /><string name="links">'+html.escape(json.dumps([LINK]),quote=False)+'</string></map>'
+          open('p.xml','w').write(px); adb('push p.xml /data/data/app.routify/shared_prefs/routify_xray.xml'); os.remove('p.xml')
+          uid=adb('shell stat -c %u /data/data/app.routify').strip()
+          adb('shell chown -R '+uid+':'+uid+' /data/data/app.routify/shared_prefs'); adb('shell restorecon -R /data/data/app.routify/shared_prefs')
+          adb('shell monkey -p app.routify -c android.intent.category.LAUNCHER 1'); time.sleep(9)
+          nav(2); time.sleep(2)
+          tap('Proxy'); tap('Connect'); time.sleep(10); shot('r2-connected'); R.append('connected: '+', '.join(texts()[:25]))
+          adb('forward tcp:18080 tcp:8080')
+          direct=sh('curl -s -m 15 https://api.ipify.org').strip()
+          for k in range(3):
+              via=sh('curl -s -m 25 -x http://127.0.0.1:18080 https://api.ipify.org').strip()
+              code=sh('curl -s -m 25 -o /dev/null -w "%{http_code}" -x http://127.0.0.1:18080 https://www.google.com/generate_204').strip()
+              R.append(f'try{k}: proxy-ip-ok={bool(re.fullmatch(r"[0-9.]+",via))} differs-from-direct={via!=direct and bool(via)} httpcode={code}')
+              if code=='204': break
+              time.sleep(5)
+          tcp=adb('shell cat /proc/net/tcp /proc/net/tcp6')
+          R.append('listen lines: '+str([l.split()[1:4] for l in tcp.splitlines() if ':1F90' in l.upper() or ':0438' in l.upper()]))
+          R.append('LISTEN ports: '+str(sorted(set(l.split()[1].split(':')[1] for l in tcp.splitlines()[1:] if len(l.split())>3 and l.split()[3]=='0A'))))
+          R.append('curl socks: '+sh('adb forward tcp:11080 tcp:1080; curl -s -m 25 --socks5-hostname 127.0.0.1:11080 -o /dev/null -w "%{http_code}" https://www.google.com/generate_204').strip())
+          R.append('nc test: '+adb('shell "echo x | nc -w 3 127.0.0.1 8080 | head -c 100"')[:150])
+          shot('r3-after-traffic'); R.append('after traffic: '+', '.join(texts()[:25]))
+
+          adb('shell input keyevent 3'); time.sleep(4)
+          code2=sh('curl -s -m 25 -o /dev/null -w "%{http_code}" -x http://127.0.0.1:18080 https://www.google.com/generate_204').strip()
+          R.append('after HOME (app in background): proxy httpcode='+code2)
+          nt=adb('shell dumpsys notification --noredact')
+          R.append('notification: '+str([l.strip()[:140] for l in nt.splitlines() if 'app.routify' in l and ('pkg=' in l or 'channel' in l.lower())][:4]))
+          R.append('notif title: '+str([l.strip()[:100] for l in nt.splitlines() if 'Routify is on' in l][:2]))
+          adb('shell cmd statusbar expand-notifications'); time.sleep(3); shot('r2b-notification')
+          adb('shell cmd statusbar collapse'); time.sleep(1)
+          adb('shell monkey -p app.routify -c android.intent.category.LAUNCHER 1'); time.sleep(3)
+          mh=re.search(r'@([^:/?#]+):(\d+)',LINK)
+          if mh:
+              R.append('runner->server TLS: '+sh(f'curl -s -m 12 -o /dev/null -w "%{{http_code}} %{{ssl_verify_result}} %{{time_connect}}" --resolve x:1:127.0.0.1 https://{mh.group(1)}:{mh.group(2)}/stream -H "Upgrade: websocket" -H "Connection: Upgrade"')[:200])
+          adb('root'); time.sleep(3)
+          fl=adb("shell find /data/data/app.routify -name 'xray.log'").split()
+          R.append('xray.log files: '+str(fl))
+          for f in fl[:1]:
+              R.append('XRAY LOG TAIL:\n'+red(adb('shell tail -n 90 '+f)))
+          cfg=adb("shell find /data/data/app.routify -name 'config.json'").split()
+          for f in cfg[:1]:
+              c=adb('shell cat '+f)
+              c=re.sub(r'"(id|address|serverName|Host|password)":"[^"]*"',r'"\1":"<x>"',c)
+              R.append('CONFIG (redacted): '+red(c)[:1500])
+          nav(3)
+          for i in range(8):
+              if tap('Error log'): break
+              adb(f'shell input swipe {W//2} {int(H*0.8)} {W//2} {int(H*0.3)} 400'); time.sleep(1)
+          shot('r3b-errorlog'); R.append('errorlog: '+', '.join(texts()[:30]))
+          adb('shell input keyevent 4'); nav(2)
+          tap('Disconnect'); time.sleep(3); shot('r4-disconnected'); R.append('after disconnect: '+', '.join(texts()[:12]))
+          R.append('listen after: '+adb('shell "cat /proc/net/tcp | grep -i \':1F90\\|:0438\'"')[:100])
+          R.append('FATAL: '+(sh("adb logcat -d | grep -E 'FATAL EXCEPTION|Process: app.routify' | head -5").strip() or 'none'))
+          open('smoke/logcat.txt','w').write(red(sh('adb logcat -d | grep -iE "routify|xray|AndroidRuntime" | tail -200')))
+          open('smoke/report.txt','w').write('\n'.join(R)); print('\n'.join(R))
+
+          PY_EOF
+          cat > smoke.sh <<'SH_EOF'
+          mkdir -p smoke
+          adb install -r -g "$APK" 2>&1 | tee smoke/install.txt
+          python3 smoke.py
+          SH_EOF
+
+      - name: Run on emulator
+        env:
+          DEBUG_VLESS: ${{ secrets.DEBUG_VLESS }}
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          disable-animations: true
+          script: bash smoke.sh
+
+      - name: Upload test output as a build artifact (not committed)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output
+          path: smoke
+          retention-days: 3

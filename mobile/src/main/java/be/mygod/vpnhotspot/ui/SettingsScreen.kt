@@ -394,6 +394,22 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
                     onClick = { if (!inspectionMode) context.launchUrl("https://github.com/ctmhod/Routify/issues") },
                 )
             }
+            row("routify_releases") {
+                PreferenceRow(
+                    icon = R.drawable.ic_star,
+                    title = "Releases",
+                    summary = "Download the latest Routify on GitHub",
+                    onClick = { if (!inspectionMode) context.launchUrl("https://github.com/ctmhod/Routify/releases") },
+                )
+            }
+            row("routify_developer") {
+                PreferenceRow(
+                    icon = R.drawable.ic_star,
+                    title = "Developer",
+                    summary = "@ctmhod on Telegram",
+                    onClick = { if (!inspectionMode) context.launchUrl("https://t.me/ctmhod") },
+                )
+            }
             row(OssLicensesR.string.oss_license_title) {
                 PreferenceRow(
                     icon = R.drawable.ic_license,

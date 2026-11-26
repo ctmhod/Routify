@@ -352,6 +352,7 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
             }
             row("routify_vpn_dns") { VpnDnsRow() }
             row("routify_vpn_log") { VpnLogRow() }
+            row("routify_error_log") { ErrorLogRow() }
         }
         preferenceGroup(title = R.string.settings_help) {
             row(R.string.settings_misc_source) {

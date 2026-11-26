@@ -1,6 +1,13 @@
 package be.mygod.vpnhotspot.ui
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import androidx.compose.ui.platform.LocalContext
+import be.mygod.vpnhotspot.util.AppLog
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -71,6 +78,39 @@ fun VpnLogRow() {
         },
         confirmButton = {},
         dismissButton = { TextButton(onClick = { editLevel = false }) { Text("Cancel") } },
+    )
+}
+
+/** Settings row that opens the app-wide error log (Copy and Clear). */
+@Composable
+fun ErrorLogRow() {
+    val context = LocalContext.current
+    var open by remember { mutableStateOf(false) }
+    var text by remember { mutableStateOf("") }
+    PreferenceRow(
+        icon = R.drawable.ic_bug_report,
+        title = "Error log",
+        summary = "Warnings, errors and crashes from the whole app. Personal data is hidden.",
+        onClick = { text = AppLog.read(); open = true },
+    )
+    if (open) AlertDialog(
+        onDismissRequest = { open = false },
+        title = { Text("Error log") },
+        text = {
+            Column(androidx.compose.ui.Modifier.verticalScroll(rememberScrollState())) {
+                Text(if (text.isBlank()) "Nothing logged." else text.takeLast(6000))
+            }
+        },
+        confirmButton = {
+            Column {
+                TextButton(enabled = text.isNotBlank(), onClick = {
+                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    cm.setPrimaryClip(ClipData.newPlainText("Routify log", text))
+                }) { Text("Copy") }
+                TextButton(onClick = { AppLog.clear(); text = "" }) { Text("Clear") }
+            }
+        },
+        dismissButton = { TextButton(onClick = { open = false }) { Text("Close") } },
     )
 }
 

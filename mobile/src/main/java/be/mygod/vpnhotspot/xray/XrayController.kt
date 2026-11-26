@@ -152,28 +152,13 @@ object XrayController {
         .replace(Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"), "<id>")
         .replace(Regex("(?i)(vless|vmess)://\\S+"), "<link>")
 
-    fun appendLog(line: String) {
-        try {
-            val f = File(dir, "app-error.log")
-            val old = if (f.exists()) f.readText().takeLast(6000) else ""
-            f.writeText(old + java.util.Date() + " " + line.take(3000) + "\n")
-        } catch (_: Throwable) { }
-    }
-    fun readLog(): String = try { File(dir, "app-error.log").takeIf { it.exists() }?.readText().orEmpty() } catch (_: Throwable) { "" }
-    fun clearLog() { try { File(dir, "app-error.log").delete(); File(dir, "crash.log").delete() } catch (_: Throwable) { } }
-    fun crashLog(): String = try { File(dir, "crash.log").takeIf { it.exists() }?.readText().orEmpty() } catch (_: Throwable) { "" }
+    fun appendLog(line: String) = be.mygod.vpnhotspot.util.AppLog.add("vpn", line)
+    fun readLog(): String = be.mygod.vpnhotspot.util.AppLog.read()
+    fun clearLog() = be.mygod.vpnhotspot.util.AppLog.clear()
+    fun crashLog(): String = ""
 
-    private var crashHandlerSet = false
-    /** Records any crash of the app to a file (redacted), so the next start can show it. */
-    fun installCrashLog() {
-        if (crashHandlerSet) return
-        crashHandlerSet = true
-        val prev = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { th, e ->
-            try { File(dir, "crash.log").writeText(java.util.Date().toString() + "\n" + redact(e.stackTraceToString()).take(6000)) } catch (_: Throwable) { }
-            prev?.uncaughtException(th, e)
-        }
-    }
+    /** The app-wide crash log is installed in App; kept so older callers still compile. */
+    fun installCrashLog() { }
 
     private suspend fun startInner(server: XrayServer, ifaces: Collection<String>) {
         val lib = withContext(Dispatchers.IO) { prepareBinary() }

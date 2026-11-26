@@ -70,6 +70,7 @@ class App : Application() {
                 } else if (priority >= Log.WARN || priority == Log.DEBUG) Log.println(priority, tag, message)
             }
         })
+        be.mygod.vpnhotspot.util.AppLog.install()
         StrictMode.setThreadPolicy(StrictMode.ThreadPolicy.Builder().apply {
             if (BuildConfig.DEBUG) detectAll() else detectNetwork()
         }.penaltyListener(InPlaceExecutor) { Timber.w(it, "StrictMode thread policy violation") }.build())

@@ -1,0 +1,96 @@
+name: Compile check clients no-root
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager "platforms;android-37.0" "build-tools;37.0.0" "ndk;29.0.14206865"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
+
+      - name: Install Android Rust targets
+        run: rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+
+      - name: Patch
+        run: |
+          cat > /tmp/patch.py <<'PY_EOF'
+          K='mobile/src/main/java/be/mygod/vpnhotspot/'
+          p=K+'client/ClientViewModel.kt'
+          t=open(p,encoding='utf-8').read()
+          a='                            Timber.w(e)\n                            SmartSnackbar.make(e).show()\n'
+          assert t.count(a)==1
+          t=t.replace(a,'                            Timber.w(e)\n                            if (e.stackTraceToString().let { "NoShellException" in it || "Root shell is not available" in it }) noRoot.value = true\n                            else SmartSnackbar.make(e).show()\n')
+          b='    private var clientsScreenJob: Job? = null\n'
+          assert t.count(b)==1
+          t=t.replace(b,'    /** True when the root shell could not be opened (shown inline on the Clients tab, no popup). */\n    val noRoot = kotlinx.coroutines.flow.MutableStateFlow(false)\n\n'+b)
+          open(p,'w',encoding='utf-8').write(t)
+          p=K+'ui/ClientsScreen.kt'
+          t=open(p,encoding='utf-8').read()
+          c='    val rows by model.clientRows.collectAsStateWithLifecycle()\n'
+          assert t.count(c)==1
+          t=t.replace(c,c+'    val noRoot by model.noRoot.collectAsStateWithLifecycle()\n')
+          d=('                    text = stringResource(R.string.clients_empty),\n'
+             '                    modifier = Modifier.padding(top = 16.dp),\n'
+             '                    color = MaterialTheme.colorScheme.onSurfaceVariant,\n'
+             '                    textAlign = TextAlign.Center,\n'
+             '                    style = MaterialTheme.typography.bodyLarge,\n'
+             '                )\n')
+          assert t.count(d)==1
+          e=('                if (noRoot) Text(\n'
+             '                    text = "Connected devices need root. Not available on this phone.",\n'
+             '                    modifier = Modifier.padding(top = 8.dp),\n'
+             '                    color = MaterialTheme.colorScheme.onSurfaceVariant,\n'
+             '                    textAlign = TextAlign.Center,\n'
+             '                    style = MaterialTheme.typography.bodyMedium,\n'
+             '                )\n')
+          t=t.replace(d,d+e)
+          open(p,'w',encoding='utf-8').write(t)
+          PY_EOF
+          python3 /tmp/patch.py
+
+      - name: Compile Kotlin
+        run: |
+          set +e
+          ./gradlew :mobile:compileDebugKotlin --no-daemon > /tmp/build.log 2>&1
+          code=$?
+          if [ $code -ne 0 ]; then
+            grep -E '^e: |error:|FAILED|What went wrong' -A2 /tmp/build.log | head -60
+            tail -30 /tmp/build.log
+            exit $code
+          fi
+          echo "Compile OK"
+
+      - name: Commit
+        run: |
+          git add -A
+          git -c user.name="ctmhod" -c user.email="290202009+ctmhod@users.noreply.github.com" commit -q -m "Clients tab: no popup without root, calm inline text instead"
+          git pull --rebase origin main || true
+          git push origin HEAD:main

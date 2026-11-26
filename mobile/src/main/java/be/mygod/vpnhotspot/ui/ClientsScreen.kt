@@ -77,6 +77,7 @@ fun ClientsScreen(model: ClientViewModel, snackbarHostState: SnackbarHostState) 
     val inspectionMode = LocalInspectionMode.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val rows by model.clientRows.collectAsStateWithLifecycle()
+    val noRoot by model.noRoot.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val blockServiceInactive = stringResource(R.string.clients_popup_block_service_inactive)
     val clientsContentDescription = stringResource(R.string.title_clients)
@@ -112,6 +113,13 @@ fun ClientsScreen(model: ClientViewModel, snackbarHostState: SnackbarHostState) 
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodyLarge,
+                )
+                if (noRoot) Text(
+                    text = "Connected devices need root. Not available on this phone.",
+                    modifier = Modifier.padding(top = 8.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
         } else preferenceGroup(key = "clients") {

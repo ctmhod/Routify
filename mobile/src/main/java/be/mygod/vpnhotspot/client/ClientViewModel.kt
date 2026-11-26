@@ -98,6 +98,9 @@ class ClientViewModel : ViewModel(), DefaultLifecycleObserver {
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** True when the root shell could not be opened (shown inline on the Clients tab, no popup). */
+    val noRoot = kotlinx.coroutines.flow.MutableStateFlow(false)
+
     private var clientsScreenJob: Job? = null
     val clientsScreenObserver = object : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
@@ -112,7 +115,8 @@ class ClientViewModel : ViewModel(), DefaultLifecycleObserver {
                         } catch (_: CancellationException) {
                         } catch (e: Exception) {
                             Timber.w(e)
-                            SmartSnackbar.make(e).show()
+                            if (e.stackTraceToString().let { "NoShellException" in it || "Root shell is not available" in it }) noRoot.value = true
+                            else SmartSnackbar.make(e).show()
                         }
                     }
                     launch {

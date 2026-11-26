@@ -17,12 +17,16 @@ import java.io.File
 
 /**
  * Starts and stops the bundled Xray-core binary as root and redirects hotspot TCP and DNS through it.
- * Design: nat REDIRECT on hotspot interfaces to a dokodemo-door inbound; Xray's own outbound is marked with bit 24
- * and skipped by the redirect chain, so there is no loop. UDP other than DNS is not proxied yet.
+ * UDP uses mangle TPROXY when the kernel supports it. Design: nat REDIRECT on hotspot interfaces to a dokodemo-door inbound; Xray's own outbound is marked with bit 24
+ * and skipped by the redirect chain, so there is no loop. Without TPROXY support, other UDP stays direct.
  */
 object XrayController {
     private const val TCP_PORT = 12345
     private const val DNS_PORT = 12346
+    private const val UDP_PORT = 12347
+    /** Bit 25: marks UDP that TPROXY hands to Xray (routed to loopback by a policy rule). */
+    private const val TMARK = 0x2000000
+    private const val UCHAIN = "ROUTIFY_UDP"
     /** Bit 24: outside the netId/permission bits Android netd uses in fwmark, so routing is not affected. */
     private const val MARK = 0x1000000
     private const val CHAIN = "ROUTIFY_XRAY"
@@ -81,7 +85,11 @@ object XrayController {
                 .put("streamSettings", JSONObject().put("sockopt", JSONObject().put("tproxy", "redirect"))))
             .put(JSONObject().put("tag", "dns-in").put("port", DNS_PORT).put("listen", "0.0.0.0")
                 .put("protocol", "dokodemo-door")
-                .put("settings", JSONObject().put("address", dnsServer).put("port", 53).put("network", "tcp,udp"))))
+                .put("settings", JSONObject().put("address", dnsServer).put("port", 53).put("network", "tcp,udp")))
+            .put(JSONObject().put("tag", "udp-in").put("port", UDP_PORT).put("listen", "0.0.0.0")
+                .put("protocol", "dokodemo-door")
+                .put("settings", JSONObject().put("network", "udp").put("followRedirect", true))
+                .put("streamSettings", JSONObject().put("sockopt", JSONObject().put("tproxy", "tproxy")))))
         .put("outbounds", JSONArray().put(server.outbound()))
         .toString()
 
@@ -172,6 +180,11 @@ object XrayController {
         }
         val direct = directMacs().filter { Regex("^[0-9a-f:]{17}$").matches(it) }
             .joinToString("\n") { "iptables -w -t nat -A $CHAIN -m mac --mac-source $it -j RETURN" }
+        val udpJumps = ifaces.joinToString("\n") { i ->
+            "iptables -w -t mangle -I PREROUTING -i ${quote(i)} -p udp -j $UCHAIN"
+        }
+        val udpDirect = directMacs().filter { Regex("^[0-9a-f:]{17}$").matches(it) }
+            .joinToString("\n") { "iptables -w -t mangle -A $UCHAIN -m mac --mac-source $it -j RETURN" }
         val script = """
             umask 022
             ${stopScript(d)}
@@ -191,6 +204,24 @@ object XrayController {
             done
             iptables -w -t nat -A $CHAIN -p tcp -j REDIRECT --to-ports $TCP_PORT
             $rules
+            # UDP (games, calls, QUIC) through TPROXY. Needs kernel support; if missing, UDP stays direct as before.
+            echo no > $d/udp
+            if iptables -w -t mangle -N $UCHAIN 2>/dev/null; then
+              $udpDirect
+              iptables -w -t mangle -A $UCHAIN -m mark --mark 0x1000000/0x1000000 -j RETURN
+              iptables -w -t mangle -A $UCHAIN -p udp --dport 53 -j RETURN
+              for n in 10.0.0.0/8 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.168.0.0/16 224.0.0.0/4 255.255.255.255/32; do
+                iptables -w -t mangle -A $UCHAIN -d ${'$'}n -j RETURN
+              done
+              if iptables -w -t mangle -A $UCHAIN -p udp -j TPROXY --on-port $UDP_PORT --tproxy-mark $TMARK/$TMARK 2>/dev/null; then
+                ip rule add fwmark $TMARK/$TMARK lookup 200 pref 90 2>/dev/null
+                ip route add local 0.0.0.0/0 dev lo table 200 2>/dev/null
+                $udpJumps
+                echo yes > $d/udp
+              else
+                iptables -w -t mangle -F $UCHAIN; iptables -w -t mangle -X $UCHAIN
+              fi
+            fi
             echo running > $d/state
             chmod -R a+rX $d
         """.trimIndent()
@@ -211,6 +242,11 @@ object XrayController {
     }
 
     private fun stopScript(d: String) = """
+        iptables -w -t mangle -S PREROUTING 2>/dev/null | grep -E "$UCHAIN" | sed 's/^-A/iptables -w -t mangle -D/' | while read -r l; do sh -c "${'$'}l"; done
+        iptables -w -t mangle -F $UCHAIN 2>/dev/null
+        iptables -w -t mangle -X $UCHAIN 2>/dev/null
+        while ip rule del fwmark $TMARK/$TMARK lookup 200 2>/dev/null; do :; done
+        ip route flush table 200 2>/dev/null
         while iptables -w -t nat -D PREROUTING -p tcp -j $CHAIN 2>/dev/null; do :; done
         iptables -w -t nat -S PREROUTING | grep -E "$CHAIN|--to-ports $DNS_PORT" | sed 's/^-A/iptables -w -t nat -D/' | while read -r l; do sh -c "${'$'}l"; done
         iptables -w -t nat -F $CHAIN 2>/dev/null
@@ -230,7 +266,8 @@ object XrayController {
         }
         _running.value = state == "running"
         _message.value = when (state) {
-            "running" -> "Connected"
+            "running" -> if (File(dir, "udp").takeIf { it.exists() }?.readText()?.trim() == "yes") "Connected (TCP, DNS and UDP)"
+                else "Connected (TCP and DNS; this phone's kernel has no UDP proxy support)"
             "failed" -> "Failed to start. " + redact(File(dir, "xray.log").takeIf { it.exists() }?.readText()?.takeLast(300) ?: "")
             else -> "Stopped"
         }

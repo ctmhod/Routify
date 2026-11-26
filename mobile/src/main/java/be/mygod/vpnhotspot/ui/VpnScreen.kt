@@ -64,7 +64,7 @@ fun VpnScreen(hotspotIfaces: Collection<String>) {
                     Column(Modifier.weight(1f)) {
                         Text(if (running) "VPN is on" else "VPN is off", style = MaterialTheme.typography.titleMedium)
                         Text(status, style = MaterialTheme.typography.bodySmall)
-                        Text("Hotspot TCP and DNS go through the server. Other UDP is not proxied yet.",
+                        Text("Hotspot TCP, DNS and UDP (games, calls, QUIC) go through the server. UDP needs kernel TPROXY support; the status line says if it is missing.",
                             style = MaterialTheme.typography.bodySmall)
                     }
                     Button(enabled = running || servers.getOrNull(selected) != null, onClick = {

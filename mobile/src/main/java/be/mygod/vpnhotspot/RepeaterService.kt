@@ -509,7 +509,7 @@ class RepeaterService : Service(), CoroutineScope {
                         passphrase = group.passphrase
                         if (Build.VERSION.SDK_INT >= 36) {
                             pccModeConnectionType = if (group.securityType == WifiP2pGroup.SECURITY_TYPE_UNKNOWN) {
-                                Timber.w("Unknown Wi-Fi P2P group security type, using legacy-only PCC mode")
+                                Timber.i("Unknown Wi-Fi P2P group security type, using legacy-only PCC mode")
                                 WifiP2pConfig.PCC_MODE_CONNECTION_TYPE_LEGACY_ONLY
                             } else group.securityType
                         }

@@ -1,0 +1,99 @@
+name: Smoke test clients
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Download latest x86_64 APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --repo ctmhod/Routify --pattern '*x86_64.apk' --dir apk
+          ls -l apk
+          gh release download v0.3.15 --repo ctmhod/Routify --pattern '*x86_64.apk' --dir apk15
+          echo "APK=$(ls apk/*.apk | head -1)" >> $GITHUB_ENV
+
+      - name: Write smoke script
+        run: |
+          cat > smoke.py <<'PY_EOF'
+          import subprocess,re,time,os,shlex,xml.etree.ElementTree as ET
+          os.makedirs('smoke',exist_ok=True)
+          R=[]
+          LINK=os.environ.get('DEBUG_VLESS','').strip()
+          def red(s):
+              s=re.sub(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}','<uuid>',s)
+              s=re.sub(r'connfull[\w.\-]*','<host>',s)
+              m=re.search(r'@([^:/?#]+)',LINK)
+              if m: s=s.replace(m.group(1),'<host>')
+              s=re.sub(r'\b(?!127\.|10\.|0\.)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b','<ip>',s)
+              return s.replace(LINK,'<link>')
+          def sh(c,t=90):
+              p=subprocess.run(c,shell=True,capture_output=True,text=True,timeout=t); return (p.stdout+p.stderr)
+          def adb(c,t=90): return sh('adb '+c,t)
+          def shot(n):
+              with open(f'smoke/{n}.png','wb') as f: f.write(subprocess.run('adb exec-out screencap -p',shell=True,capture_output=True).stdout)
+          def nodes():
+              adb('shell uiautomator dump /sdcard/u.xml'); adb('pull /sdcard/u.xml smoke/ui.xml')
+              out=[]
+              for n in ET.parse('smoke/ui.xml').iter('node'):
+                  m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.get('bounds',''))
+                  if m:
+                      a=list(map(int,m.groups())); out.append((n.get('text',''),n.get('content-desc',''),((a[0]+a[2])//2,(a[1]+a[3])//2)))
+              os.remove('smoke/ui.xml'); return out
+          def texts(): return [red(t) for t,d,x in nodes() if t]
+          def tap(l):
+              for t,d,xy in nodes():
+                  if t==l or d==l:
+                      adb(f'shell input tap {xy[0]} {xy[1]}'); time.sleep(2.5); return True
+              R.append('NOT FOUND: '+l); return False
+          SZ=re.search(r'(\d+)x(\d+)',adb('shell wm size')); W,H=int(SZ.group(1)),int(SZ.group(2))
+          def nav(i): adb(f'shell input tap {int(W*(0.125+0.25*i))} {int(H*0.885)}'); time.sleep(3)
+          adb('logcat -c')
+          adb('shell monkey -p app.routify -c android.intent.category.LAUNCHER 1'); time.sleep(9)
+          nav(1); time.sleep(1.5); shot('c1-clients-first')
+          R.append('first: '+', '.join(texts()[:12]))
+          nav(0); time.sleep(2); nav(1); time.sleep(1.5); shot('c2-clients-second')
+          R.append('second: '+', '.join(texts()[:12]))
+          open('smoke/report.txt','w').write('\n'.join(R)); print('\n'.join(R))
+
+          PY_EOF
+          cat > smoke.sh <<'SH_EOF'
+          mkdir -p smoke
+          adb install -r -g "$APK" 2>&1 | tee smoke/install.txt
+          python3 smoke.py
+          SH_EOF
+
+      - name: Run on emulator
+        env:
+          DEBUG_VLESS: ${{ secrets.DEBUG_VLESS }}
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          disable-animations: true
+          script: bash smoke.sh
+
+      - name: Upload test output as a build artifact (not committed)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output
+          path: smoke
+          retention-days: 3

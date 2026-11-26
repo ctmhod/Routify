@@ -28,7 +28,11 @@ fun VpnScreen(hotspotIfaces: Collection<String>) {
     val running by XrayController.running.collectAsState()
     val status by XrayController.message.collectAsState()
     var logText by remember { mutableStateOf(XrayController.crashLog() + XrayController.readLog()) }
-    LaunchedEffect(Unit) { XrayController.installCrashLog(); XrayController.refresh() }
+    LaunchedEffect(Unit) { XrayController.installCrashLog(); XrayController.refresh(); XrayController.detectRoot() }
+    val root by XrayController.rootAvailable.collectAsState()
+    var mode by remember { mutableStateOf(XrayController.mode) }
+    val proxyMode = mode == "proxy" || (mode == "auto" && root != true)
+    var addresses by remember { mutableStateOf(XrayController.hotspotAddresses()) }
     val servers = links.map { XrayServer.parse(it) }
 
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -64,14 +68,18 @@ fun VpnScreen(hotspotIfaces: Collection<String>) {
                     Column(Modifier.weight(1f)) {
                         Text(if (running) "VPN is on" else "VPN is off", style = MaterialTheme.typography.titleMedium)
                         Text(status, style = MaterialTheme.typography.bodySmall)
-                        Text("Hotspot TCP, DNS and UDP (games, calls, QUIC) go through the server. UDP needs kernel TPROXY support; the status line says if it is missing.",
+                        Text(if (proxyMode) "Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)."
+                        else "Transparent mode (root): hotspot TCP, DNS and UDP go through the server with no settings on the other device. UDP needs kernel TPROXY support.",
                             style = MaterialTheme.typography.bodySmall)
                     }
                     Button(enabled = running || servers.getOrNull(selected) != null, onClick = {
                         scope.launch {
                             try {
                                 if (running) XrayController.stop()
-                                else servers.getOrNull(selected)?.let { XrayController.start(it, hotspotIfaces) }
+                                else servers.getOrNull(selected)?.let {
+                                    if (proxyMode) XrayController.startProxy(it) else XrayController.start(it, hotspotIfaces)
+                                }
+                                addresses = XrayController.hotspotAddresses()
                             } catch (e: kotlinx.coroutines.CancellationException) {
                                 throw e
                             } catch (e: Throwable) {
@@ -80,6 +88,48 @@ fun VpnScreen(hotspotIfaces: Collection<String>) {
                             logText = XrayController.crashLog() + XrayController.readLog()
                         }
                     }) { Text(if (running) "Disconnect" else "Connect") }
+                }
+            }
+        }
+        item {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Mode", style = MaterialTheme.typography.titleSmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("auto" to "Auto", "transparent" to "Root", "proxy" to "Proxy").forEach { (key, label) ->
+                            FilterChip(selected = mode == key, enabled = !running, onClick = {
+                                mode = key; XrayController.mode = key
+                            }, label = { Text(label) })
+                        }
+                    }
+                    Text(when (root) {
+                        null -> "Checking for root..."
+                        true -> "Root found. Auto uses transparent mode."
+                        false -> "No root found. Auto uses proxy mode."
+                    }, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        if (proxyMode) item {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Proxy address for other devices", style = MaterialTheme.typography.titleSmall)
+                    if (addresses.isEmpty()) Text("No hotspot address found. Turn on the hotspot in Android settings, then tap Refresh.",
+                        style = MaterialTheme.typography.bodySmall)
+                    addresses.forEach { ip ->
+                        listOf("HTTP (Wi-Fi proxy)" to XrayController.HTTP_PORT, "SOCKS5" to XrayController.SOCKS_PORT).forEach { (name, port) ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("$name  $ip:$port", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                                TextButton(onClick = {
+                                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    cm.setPrimaryClip(android.content.ClipData.newPlainText("Routify proxy", "$ip:$port"))
+                                }) { Text("Copy") }
+                            }
+                        }
+                    }
+                    Text("On the other device: Wi-Fi > this hotspot > Proxy > Manual > enter the HTTP address and port.",
+                        style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = { addresses = XrayController.hotspotAddresses() }) { Text("Refresh") }
                 }
             }
         }

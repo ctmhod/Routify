@@ -27,7 +27,7 @@ data class XrayServer(
     val vmessCipher: String = "auto",
 ) {
     /** Outbound object for Xray's JSON config. */
-    fun outbound(): JSONObject {
+    fun outbound(mark: Boolean = true): JSONObject {
         val stream = JSONObject().put("network", network).put("security", security)
         val tlsName = sni.ifEmpty { wsHost.ifEmpty { host } }
         when (security) {
@@ -53,7 +53,7 @@ data class XrayServer(
                 if (wsHost.isNotEmpty()) put("host", wsHost)
             })
         }
-        stream.put("sockopt", JSONObject().put("mark", 0x1000000))
+        if (mark) stream.put("sockopt", JSONObject().put("mark", 0x1000000))
         val settings = if (protocol == "vless") JSONObject().put("vnext", JSONArray().put(JSONObject()
             .put("address", host).put("port", port).put("users", JSONArray().put(JSONObject()
                 .put("id", id).put("encryption", "none").apply { if (flow.isNotEmpty()) put("flow", flow) }))))

@@ -24,6 +24,8 @@ object XrayController {
     private const val TCP_PORT = 12345
     private const val DNS_PORT = 12346
     private const val UDP_PORT = 12347
+    const val HTTP_PORT = 8080
+    const val SOCKS_PORT = 1080
     /** Bit 25: marks UDP that TPROXY hands to Xray (routed to loopback by a policy rule). */
     private const val TMARK = 0x2000000
     private const val UCHAIN = "ROUTIFY_UDP"
@@ -76,9 +78,15 @@ object XrayController {
         prefs.edit().putString("direct_macs", JSONArray(m.toList()).toString()).apply()
     }
 
-    private fun config(server: XrayServer): String = JSONObject()
-        .put("log", JSONObject().put("loglevel", logLevel))
-        .put("inbounds", JSONArray()
+    private fun config(server: XrayServer, proxy: Boolean = false): String {
+        val inbounds = JSONArray()
+        if (proxy) {
+            inbounds.put(JSONObject().put("tag", "http-in").put("port", HTTP_PORT).put("listen", "0.0.0.0")
+                .put("protocol", "http").put("settings", JSONObject()))
+            inbounds.put(JSONObject().put("tag", "socks-in").put("port", SOCKS_PORT).put("listen", "0.0.0.0")
+                .put("protocol", "socks").put("settings", JSONObject().put("udp", true).put("auth", "noauth")))
+        } else {
+            inbounds
             .put(JSONObject().put("tag", "tcp-in").put("port", TCP_PORT).put("listen", "0.0.0.0")
                 .put("protocol", "dokodemo-door")
                 .put("settings", JSONObject().put("network", "tcp").put("followRedirect", true))
@@ -89,34 +97,20 @@ object XrayController {
             .put(JSONObject().put("tag", "udp-in").put("port", UDP_PORT).put("listen", "0.0.0.0")
                 .put("protocol", "dokodemo-door")
                 .put("settings", JSONObject().put("network", "udp").put("followRedirect", true))
-                .put("streamSettings", JSONObject().put("sockopt", JSONObject().put("tproxy", "tproxy")))))
-        .put("outbounds", JSONArray().put(server.outbound()))
-        .toString()
-
-
-    /**
-     * The Xray binary ships gzip-compressed inside the APK as lib/<abi>/libxraygz.so (a gzip file, not an ELF),
-     * so each CPU type only carries its own copy and the APK stays small. It is unpacked once into app data.
-     */
-    private fun prepareBinary(): String? {
-        val info = app.applicationInfo
-        val stamp = File(dir, "xray-bin.stamp")
-        val out = File(dir, "xray-bin")
-        java.util.zip.ZipFile(info.sourceDir).use { zip ->
-            val abi = Build.SUPPORTED_ABIS.firstOrNull { zip.getEntry("lib/$it/libxraygz.so") != null } ?: return null
-            val want = abi + ":" + app.packageManager.getPackageInfo(app.packageName, 0).lastUpdateTime
-            if (!out.exists() || !stamp.exists() || stamp.readText() != want) {
-                val tmp = File(dir, "xray-bin.tmp")
-                java.util.zip.GZIPInputStream(zip.getInputStream(zip.getEntry("lib/$abi/libxraygz.so"))).use { input ->
-                    tmp.outputStream().use { input.copyTo(it) }
-                }
-                tmp.setReadable(true, false)
-                tmp.setExecutable(true, false)
-                if (!tmp.renameTo(out)) { tmp.delete(); return null }
-                stamp.writeText(want)
-            }
+                .put("streamSettings", JSONObject().put("sockopt", JSONObject().put("tproxy", "tproxy"))))
         }
-        return out.absolutePath
+        return JSONObject()
+            .put("log", JSONObject().put("loglevel", logLevel))
+            .put("inbounds", inbounds)
+            .put("outbounds", JSONArray().put(server.outbound(mark = !proxy)))
+            .toString()
+    }
+
+
+    /** Xray ships as a real native library (libxray.so) that Android extracts into the app's native-lib folder. */
+    private fun prepareBinary(): String? {
+        val f = File(app.applicationInfo.nativeLibraryDir, "libxray.so")
+        return f.takeIf { it.exists() }?.absolutePath
     }
 
     /** Go's resolver has no resolv.conf on Android, so resolve the server name here and keep the name for SNI and Host. */
@@ -136,6 +130,78 @@ object XrayController {
     private fun linker() = if (Process.is64Bit()) "/system/bin/linker64" else "/system/bin/linker"
 
     private fun quote(s: String) = "'" + s.replace("'", "'\\''") + "'"
+
+    /** "auto" picks transparent mode when root works and proxy mode otherwise. */
+    var mode: String
+        get() = prefs.getString("mode", null)?.takeIf { it in listOf("auto", "transparent", "proxy") } ?: "auto"
+        set(v) = prefs.edit().putString("mode", v).apply()
+
+    val rootAvailable: StateFlow<Boolean?> get() = _root
+    private val _root = MutableStateFlow<Boolean?>(null)
+
+    suspend fun detectRoot() {
+        if (_root.value != null) return
+        _root.value = try {
+            RootManager.use { it.execute(RunShell("id")) }
+            true
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            false
+        }
+    }
+
+    /** True when the local proxy mode is used (manual choice, or auto without root). */
+    fun useProxy(): Boolean = mode == "proxy" || (mode == "auto" && _root.value != true)
+
+    private var proxyProc: java.lang.Process? = null
+
+    /** IPv4 addresses of hotspot-like interfaces, where connected devices can reach the proxy. */
+    fun hotspotAddresses(): List<String> = try {
+        java.net.NetworkInterface.getNetworkInterfaces().toList()
+            .filter { it.isUp && !it.isLoopback && Regex("^(ap|wlan|swlan|softap|rndis|bt-pan|eth)\\d*.*").matches(it.name) }
+            .flatMap { n -> n.inetAddresses.toList().filterIsInstance<java.net.Inet4Address>().filter { it.isSiteLocalAddress }
+                .map { it.hostAddress ?: "" } }
+            .filter { it.isNotEmpty() }
+    } catch (_: Throwable) { emptyList() }
+
+    /** Proxy mode: no root needed. Connected devices set an HTTP proxy in their Wi-Fi settings. */
+    suspend fun startProxy(server: XrayServer) {
+        try {
+            val lib = withContext(Dispatchers.IO) { prepareBinary() }
+            if (lib == null) { _message.value = "Xray engine missing from this build"; return }
+            stopProxyProcess()
+            val resolved = withContext(Dispatchers.IO) { resolve(server) }
+            withContext(Dispatchers.IO) {
+                File(dir, "config.json").writeText(config(resolved, proxy = true))
+                val pb = ProcessBuilder(lib, "run", "-c", File(dir, "config.json").absolutePath)
+                    .directory(dir).redirectErrorStream(true).redirectOutput(File(dir, "xray.log"))
+                pb.environment()["XRAY_LOCATION_ASSET"] = dir.absolutePath
+                proxyProc = pb.start()
+                Thread.sleep(1200)
+            }
+            val p = proxyProc
+            if (p == null || !p.isAlive) {
+                val log = File(dir, "xray.log").takeIf { it.exists() }?.readText()?.takeLast(300) ?: ""
+                _running.value = false
+                _message.value = "Failed to start. " + redact(log)
+                appendLog("Proxy start failed: $log")
+            } else {
+                File(dir, "state").writeText("proxy")
+                _running.value = true
+                _message.value = "Proxy on (HTTP $HTTP_PORT, SOCKS $SOCKS_PORT)"
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            fail("Connect failed", e)
+        }
+    }
+
+    private fun stopProxyProcess() {
+        try { proxyProc?.destroy() } catch (_: Throwable) { }
+        proxyProc = null
+    }
 
     /** [ifaces] are the active hotspot interfaces whose clients get proxied. */
     suspend fun start(server: XrayServer, ifaces: Collection<String>) {
@@ -191,9 +257,14 @@ object XrayController {
             echo ${quote(cfg)} | base64 -d > $d/config.json
             cd $d
             S=${'$'}(command -v setsid || true)
-            XRAY_LOCATION_ASSET=$d ${'$'}S nohup ${linker()} ${quote(lib)} run -c $d/config.json > $d/xray.log 2>&1 &
+            XRAY_LOCATION_ASSET=$d ${'$'}S nohup ${quote(lib)} run -c $d/config.json > $d/xray.log 2>&1 &
             echo ${'$'}! > $d/xray.pid
             sleep 1
+            if ! kill -0 ${'$'}(cat $d/xray.pid) 2>/dev/null; then
+              XRAY_LOCATION_ASSET=$d ${'$'}S nohup ${linker()} ${quote(lib)} run -c $d/config.json >> $d/xray.log 2>&1 &
+              echo ${'$'}! > $d/xray.pid
+              sleep 1
+            fi
             if ! kill -0 ${'$'}(cat $d/xray.pid) 2>/dev/null; then echo failed > $d/state; exit 1; fi
             iptables -w -t nat -N $CHAIN
             $direct
@@ -231,6 +302,13 @@ object XrayController {
     }
 
     suspend fun stop() {
+        if (proxyProc != null || useProxy()) {
+            stopProxyProcess()
+            _running.value = false
+            _message.value = "Stopped"
+            try { File(dir, "state").writeText("stopped") } catch (_: Throwable) { }
+            return
+        }
         try {
             RootManager.use { it.execute(RunShell(stopScript(dir.absolutePath) + "\necho stopped > ${dir.absolutePath}/state; chmod a+r ${dir.absolutePath}/state")) }
             refresh()
@@ -258,7 +336,12 @@ object XrayController {
     fun refresh() = try { refreshInner() } catch (e: Throwable) { _message.value = "Status unavailable" }
 
     private fun refreshInner() {
+        proxyProc?.let { p ->
+            if (p.isAlive) { _running.value = true; return }
+            proxyProc = null
+        }
         var state = File(dir, "state").takeIf { it.exists() }?.readText()?.trim()
+        if (state == "proxy") state = "stopped"
         if (state == "running") {
             // After a reboot the state file stays behind (Xray and the iptables rules are gone). /proc is hidden from apps.
             val bootTime = System.currentTimeMillis() - android.os.SystemClock.elapsedRealtime()

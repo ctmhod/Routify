@@ -1,11 +1,77 @@
-t01 auto + system light
-t02 auto + system dark
-t03 sheet: Theme, Auto (follow system), Dark, Light
-t04 Dark chosen, system light
-t05 sheet: Theme, Auto (follow system), Dark, Light
-t06 Light chosen, system dark
-t07 after restart (should still be Light)
-t08 sheet: Theme, Auto (follow system), Dark, Light
-t09 Auto + system dark
-prefs: 
-FATAL: none
+== UPGRADE ==
+uninstall: Success
+install old: Performing Streamed Install
+Success
+[old] crash: none
+upgrade install: Performing Streamed Install
+Success
+[upgrade] crash: none
+== FRESH ==
+fresh install: Performing Streamed Install
+Success
+first launch: Repeater, Temporary Wi‑Fi hotspot, Static IP, Manage system tethering…, Wi‑Fi hotspot, USB tethering, Bluetooth tethering, Ethernet tethering, Routify, Tethering, Clients, VPN
+[fresh] crash: none
+Tethering: Repeater, Temporary Wi‑Fi hotspot, Static IP, Manage system tethering…, Wi‑Fi hotspot, USB tethering, Bluetooth tethering, Ethernet tethering, Routify, Tethering, Clients, VPN, Settings
+[Tethering] crash: none
+Clients: No clients connected, Routify, Tethering, Clients, VPN, Settings, Root shell is not available
+[Clients] crash: none
+VPN: Paste vless:// or vmess:// link, Paste, Add, VPN is off, Stopped, Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)., Connect, Mode, Auto, Root, Proxy, No root found. Auto uses proxy mode., Proxy address for other devices, HTTP (Wi-Fi proxy)  10.0.2.15:8080, Copy, Routify, Tethering, Clients
+[VPN] crash: none
+Settings: Clean/reapply routing rules, Update changed settings to current active services. Can also fix rare race conditions, Upstream, Upstream network interface, Auto detect system VPN (current: ∅), Fallback upstream interface, Auto detect system default network (current: wlan0), Downstream, IPv4 masquerade mode, Simple, IPv6 mode, Block, Tethering hardware acceleration, Shortcut to system Developer options. Turning this off is often needed for VPN tethering over system tethering, but it can reduce battery life while tethering is active, Routify, Tethering, Clients, VPN
+[Settings] crash: none
+tapped Repeater: Configuration method, Framework, Network name, Network name, Password, Turn off hotspot automatically, When no devices are connected for the shutdown timeout: Default (10m), AP Band
+[Repeater] crash: none
+NOT FOUND: Temporary Wi-Fi hotspot
+tapped Static IP: Static IP, Enter one IPv4 or IPv6 address per line. Add /prefix when needed, for example 10.0.0.1/24 or fd00::1/64. Without /prefix, the address is added as a single host., 10.93.149.103
+fd0c:7181:dc05::1, OK, Cancel
+[Static IP] crash: none
+tapped Manage system tethering…: Hotspot & tethering, Wi‑Fi hotspot, Not sharing internet or content with other devices, USB tethering, Share phone’s internet connection via USB, Bluetooth tethering, Share phone’s internet connection via Bluetooth, Ethernet tethering
+[Manage system tethering…] crash: none
+NOT FOUND: Wi-Fi hotspot
+tapped USB tethering: Modify system settings, Routify, 0.3.17, Allow modifying system settings, This permission allows an app to modify system settings.
+[USB tethering] crash: none
+tapped Bluetooth tethering: Modify system settings, Routify, 0.3.17, Allow modifying system settings, This permission allows an app to modify system settings.
+[Bluetooth tethering] crash: none
+tapped Ethernet tethering: Modify system settings, Routify, 0.3.17, Allow modifying system settings, This permission allows an app to modify system settings.
+[Ethernet tethering] crash: none
+v1-garbage: notalink, Paste vless:// or vmess:// link, No valid vless:// or vmess:// link found, Paste, Add, VPN is off, Stopped, Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)., Connect, Mode, Auto, Root, Proxy, No root found. Auto uses proxy mode., Proxy address for other devices, HTTP (Wi-Fi proxy)  10.0.2.15:8080, Copy, Routify, Tethering, Clients
+[v1-garbage] crash: none
+v2-badvless: notalinkvless://bad, Paste vless:// or vmess:// link, No valid vless:// or vmess:// link found, Paste, Add, VPN is off, Stopped, Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)., Connect, Mode, Auto, Root, Proxy, No root found. Auto uses proxy mode., Proxy address for other devices, HTTP (Wi-Fi proxy)  10.0.2.15:8080, Copy, Routify, Tethering, Clients
+[v2-badvless] crash: none
+v3-badvmess: notalinkvless://badvmess://eyJ4Ijoi, Paste vless:// or vmess:// link, No valid vless:// or vmess:// link found, Paste, Add, VPN is off, Stopped, Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)., Connect, Mode, Auto, Root, Proxy, No root found. Auto uses proxy mode., Proxy address for other devices, HTTP (Wi-Fi proxy)  10.0.2.15:8080, Copy, Routify, Tethering, Clients
+[v3-badvmess] crash: none
+v4-good: notalinkvless://badvmess://eyJ4Ijoivless://11111111-2222-3333-4444-555555555555@127.0.0.1:4430?security=none&type=tcp#t1, Paste vless:// or vmess:// link, No valid vless:// or vmess:// link found, Paste, Add, VPN is off, Stopped, Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)., Connect, Mode, Auto, Root, Proxy, No root found. Auto uses proxy mode., Proxy address for other devices, Routify, Tethering, Clients, VPN, Settings
+[v4-good] crash: none
+connected: notalinkvless://badvmess://eyJ4Ijoivless://11111111-2222-3333-4444-555555555555@127.0.0.1:4430?security=none&type=tcp#t1, Paste vless:// or vmess:// link, No valid vless:// or vmess:// link found, Paste, Add, VPN is off, Stopped, Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)., Connect, Mode, Auto, Root, Proxy, No root found. Auto uses proxy mode., Proxy address for other devices, Routify, Tethering, Clients, VPN, Settings
+listen: Cannot open netlink socket: Permission denied
+
+[rotate] crash: none
+after relaunch: Paste vless:// or vmess:// link, Paste, Add, VPN is off, Stopped, Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)., Connect, Mode, Auto, Root, Proxy, No root found. Auto uses proxy mode., Proxy address for other devices, HTTP (Wi-Fi proxy)  10.0.2.15:8080, Copy, Routify, Tethering, Clients, VPN, Settings
+[relaunch] crash: none
+NOT FOUND: Disconnect
+listen after: Cannot open netlink socket: Permission denied
+
+[double] crash: none
+NOT FOUND: Disconnect
+settings page0: Clean/reapply routing rules, Update changed settings to current active services. Can also fix rare race conditions, Upstream, Upstream network interface, Auto detect system VPN (current: ∅), Fallback upstream interface, Auto detect system default network (current: wlan0), Downstream, IPv4 masquerade mode, Simple, IPv6 mode, Block, Tethering hardware acceleration, Shortcut to system Developer options. Turning this off is often needed for VPN tethering over system tethering, but it can reduce battery life while tethering is active, Routify, Tethering, Clients, VPN, Settings
+row "Clean/reapply routing rules" -> Clean/reapply routing rules, Update changed settings to current active services. Can also fix rare race conditions, Upstream, Upstream network interface, Auto detect system VPN (current: ∅), Fallback upstream interface, Auto detect system default network (current: wlan0), Downstream
+[row Clean/reapply routing rules] crash: none
+settings page1: Repeater, Temporary Wi‑Fi hotspot, Static IP, Manage system tethering…, Wi‑Fi hotspot, USB tethering, Bluetooth tethering, Ethernet tethering, Routify, Tethering, Clients, VPN, Settings
+row "Repeater" -> Configuration method, Framework, Network name, Network name, Password, Turn off hotspot automatically, When no devices are connected for the shutdown timeout: Default (10m), AP Band
+[row Repeater] crash: none
+row "Temporary Wi‑Fi hotspot" -> Allow Routify to access this device’s location?, While using the app, Only this time, Deny
+[row Temporary Wi‑Fi hotspot] crash: none
+row "Static IP" -> Static IP, Enter one IPv4 or IPv6 address per line. Add /prefix when needed, for example 10.0.0.1/24 or fd00::1/64. Without /prefix, the address is added as a single host., 10.93.149.103
+fd0c:7181:dc05::1, OK, Cancel
+[row Static IP] crash: none
+NOT FOUND: Error log
+NOT FOUND: Error log
+errorlog: Error log, Nothing logged., Copy, Clear, Close
+meminfo:         TOTAL    42401    28832     6148      296    42401    39043    24314    10449
+           Java Heap:     7528                          22716
+           TOTAL PSS:    42401            TOTAL RSS:   156716       TOTAL SWAP PSS:      296
+
+[end] crash: none
+logcat errors: --------- beginning of main
+--------- beginning of system
+--------- beginning of kernel

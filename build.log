@@ -34,7 +34,7 @@ w: file:///home/runner/work/Routify/Routify/mobile/src/main/java/be/mygod/vpnhot
 w: file:///home/runner/work/Routify/Routify/mobile/src/main/java/be/mygod/vpnhotspot/net/wifi/SoftApConfigurationCompat.kt:397:62 'val enabled: Boolean' is deprecated. Use SoftApConfigurationCompat instead.
 w: file:///home/runner/work/Routify/Routify/mobile/src/main/java/be/mygod/vpnhotspot/root/SupplicantP2pIface.kt:97:13 Expected performance impact from inlining is insignificant. Inlining works best for functions with parameters of function types.
 w: file:///home/runner/work/Routify/Routify/mobile/src/main/java/be/mygod/vpnhotspot/util/Utils.kt:259:48 This class is not recommended for use in Kotlin. Use 'kotlin.Any' instead.
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_5-1795693857358.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_5-1795696043584.json
 
 [Incubating] Problems report is available at: file:///home/runner/work/Routify/Routify/build/reports/problems/problems-report.html
 

@@ -352,6 +352,7 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
             }
             row("routify_vpn_dns") { VpnDnsRow() }
             row("routify_vpn_log") { VpnLogRow() }
+            row("routify_theme") { ThemeRow() }
             row("routify_error_log") { ErrorLogRow() }
         }
         item(key = "routify_developer_group") {
@@ -738,3 +739,26 @@ private val UPSTREAM_INTERNET_V6_ADDRESS = InetAddress.getByAddress(byteArrayOf(
     0x20, 0x01, 0x48, 0x60, 0x48, 0x60, 0, 0,
     0, 0, 0, 0, 0, 0, 0x88.toByte(), 0x88.toByte(),
 ))
+
+
+@Composable
+private fun ThemeRow() {
+    val mode = be.mygod.vpnhotspot.ui.theme.rememberThemeMode()
+    val names = listOf("Auto (follow system)", "Dark", "Light")
+    var selecting by rememberSaveable { mutableStateOf(false) }
+    PreferenceRow(
+        icon = R.drawable.ic_star,
+        title = "Theme",
+        summary = names[mode.coerceIn(0, 2)],
+        onClick = { selecting = true },
+    )
+    if (selecting) PreferenceSelectionSheet(
+        title = "Theme",
+        entryCount = names.size,
+        selectedIndex = mode.coerceIn(0, 2),
+        entryLabel = names::get,
+        entrySummary = { null },
+        onDismissRequest = { selecting = false },
+        onSelect = { be.mygod.vpnhotspot.ui.theme.ThemeMode.mode = it },
+    )
+}

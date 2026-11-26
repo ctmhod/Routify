@@ -20,9 +20,6 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge(
-            statusBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-            navigationBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
         val model by viewModels<ClientViewModel>()
         lifecycle.addObserver(model)
@@ -34,6 +31,14 @@ class MainActivity : ComponentActivity() {
                 object : UriHandler {
                     override fun openUri(uri: String) = context.launchUrl(uri)
                 }
+            }
+            val dark = be.mygod.vpnhotspot.ui.theme.isDarkTheme()
+            androidx.compose.runtime.LaunchedEffect(dark) {
+                enableEdgeToEdge(
+                    statusBarStyle = if (dark) androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                    else androidx.activity.SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+                    navigationBarStyle = if (dark) androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                    else androidx.activity.SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT))
             }
             CompositionLocalProvider(LocalUriHandler provides uriHandler) {
                 VpnHotspotTheme { VpnHotspotApp(model) }

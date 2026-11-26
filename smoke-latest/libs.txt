@@ -1,4 +1,0 @@
-total 34664
--rwxr-xr-x 1 system system    10760 1981-01-01 01:01 libandroidx.graphics.path.so
--rwxr-xr-x 1 system system  3204712 1981-01-01 01:01 libvpnhotspotd.so
--rwxr-xr-x 1 system system 32260220 1981-01-01 01:01 libxray.so

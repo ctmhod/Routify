@@ -1,0 +1,28 @@
+tethering: Repeater, Temporary Wi‑Fi hotspot, Static IP, Manage system tethering…, Wi‑Fi hotspot, USB tethering, Bluetooth tethering, Ethernet tethering, Routify, Tethering, Clients, VPN
+Clients: Repeater, Temporary Wi‑Fi hotspot, Static IP, Manage system tethering…, Wi‑Fi hotspot, USB tethering, Bluetooth tethering, Ethernet tethering, Routify, Tethering, Clients, VPN, Settings
+VPN: Repeater, Temporary Wi‑Fi hotspot, Static IP, Manage system tethering…, Wi‑Fi hotspot, USB tethering, Bluetooth tethering, Ethernet tethering, Routify, Tethering, Clients, VPN, Settings
+Settings: Repeater, Temporary Wi‑Fi hotspot, Static IP, Manage system tethering…, Wi‑Fi hotspot, USB tethering, Bluetooth tethering, Ethernet tethering, Routify, Tethering, Clients, VPN, Settings
+OK tabs
+NOT FOUND: Add
+vpn after add: Configuration method, Framework, Network name, Network name, Password, Turn off hotspot automatically, When no devices are connected for the shutdown timeout: Default (10m), AP Band, AP channel/band, 2.4/5 GHz Band, Advanced options, Wi‑Fi configuration
+NOT FOUND: Proxy
+NOT FOUND: Connect
+vpn connected: Configuration method, Framework, Network name, Network name, Password, Turn off hotspot automatically, When no devices are connected for the shutdown timeout: Default (10m), AP Band, AP channel/band, 2.4/5 GHz Band, Advanced options, Wi‑Fi configuration
+listen: Cannot open netlink socket: Permission denied
+
+NOT FOUND: Disconnect
+after disconnect: Configuration method, Framework, Network name, Network name, Password, Turn off hotspot automatically, When no devices are connected for the shutdown timeout: Default (10m), AP Band
+listen after: Cannot open netlink socket: Permission denied
+
+OK vpn
+NOT FOUND: Settings
+settings page0: Configuration method, Framework, Network name, Network name, Password, Turn off hotspot automatically, When no devices are connected for the shutdown timeout: Default (10m), AP Band, AP channel/band, 2.4/5 GHz Band, Advanced options, Wi‑Fi configuration
+settings page1: Configuration method, Framework, Network name, Network name, Password, Turn off hotspot automatically, When no devices are connected for the shutdown timeout: Default (10m), AP Band, AP channel/band, 2.4/5 GHz Band, Advanced options, Wi‑Fi configuration
+OK settings
+NOT FOUND: Error log
+errlog: Configuration method, Framework, Network name, Network name, Password, Turn off hotspot automatically, When no devices are connected for the shutdown timeout: Default (10m), AP Band, AP channel/band, 2.4/5 GHz Band, Advanced options, Wi‑Fi configuration
+NOT FOUND: Close
+OK errlog
+NOT FOUND: Developer
+OK developer
+FATAL: none

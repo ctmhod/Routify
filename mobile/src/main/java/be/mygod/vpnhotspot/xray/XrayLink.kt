@@ -28,6 +28,9 @@ data class XrayServer(
     val insecure: Boolean = false, // allowInsecure=1 in the link (Routify pins the server certificate instead)
     val pin: String = "",          // pcs= in the link: SHA-256 of the server certificate
 ) {
+    /** Only xtls-rprx-vision is a real flow, and only over plain TCP. Links that say flow=none must not send it to Xray. */
+    private fun flowOk() = flow.startsWith("xtls-rprx-vision") && network == "tcp"
+
     /** Outbound object for Xray's JSON config. */
     fun outbound(mark: Boolean = true): JSONObject {
         val stream = JSONObject().put("network", network).put("security", security)
@@ -59,7 +62,7 @@ data class XrayServer(
         if (mark) stream.put("sockopt", JSONObject().put("mark", 0x1000000))
         val settings = if (protocol == "vless") JSONObject().put("vnext", JSONArray().put(JSONObject()
             .put("address", host).put("port", port).put("users", JSONArray().put(JSONObject()
-                .put("id", id).put("encryption", "none").apply { if (flow.isNotEmpty()) put("flow", flow) }))))
+                .put("id", id).put("encryption", "none").apply { if (flowOk()) put("flow", flow) }))))
         else JSONObject().put("vnext", JSONArray().put(JSONObject()
             .put("address", host).put("port", port).put("users", JSONArray().put(JSONObject()
                 .put("id", id).put("alterId", alterId).put("security", vmessCipher)))))

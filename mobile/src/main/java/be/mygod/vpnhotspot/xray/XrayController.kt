@@ -429,7 +429,7 @@ object XrayController {
             XRAY_LOCATION_ASSET=$d ${'$'}S nohup ${quote(lib)} run -c $d/config.json > $d/xray.log 2>&1 &
             echo ${'$'}! > $d/xray.pid
             sleep 1
-            if ! kill -0 ${'$'}(cat $d/xray.pid) 2>/dev/null; then
+            if ! kill -0 ${'$'}(cat $d/xray.pid) 2>/dev/null && ! grep -qE 'infra/conf|Failed to start' $d/xray.log 2>/dev/null; then
               XRAY_LOCATION_ASSET=$d ${'$'}S nohup ${linker()} ${quote(lib)} run -c $d/config.json >> $d/xray.log 2>&1 &
               echo ${'$'}! > $d/xray.pid
               sleep 1

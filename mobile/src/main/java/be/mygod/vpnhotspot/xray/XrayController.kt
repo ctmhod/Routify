@@ -479,7 +479,9 @@ object XrayController {
     suspend fun stop() {
         PhoneVpn.stop()
         stopPhoneEngine()
-        if (proxyProc != null || useProxy() || File(dir, "state").takeIf { it.exists() }?.readText()?.trim() == "proxy") {
+        val st = File(dir, "state").takeIf { it.exists() }?.readText()?.trim()
+        // A leftover root session (state "running") must always be cleaned up with the root script, whatever the mode says now.
+        if (proxyProc != null || st == "proxy" || (useProxy() && st != "running")) {
             stopProxyProcess()
             _running.value = false
             _message.value = "Stopped"

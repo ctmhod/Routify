@@ -27,6 +27,36 @@ object PhoneVpn {
         _status.value = ""
     }
 
+    /**
+     * Sends one small web request through the local SOCKS port and waits for any answer, so a dead or misconfigured
+     * server is found before this device is put on the VPN. Returns an empty string when it works, else the reason.
+     */
+    fun serverCheck(port: Int): String {
+        try {
+            java.net.Socket().use { s ->
+                s.connect(java.net.InetSocketAddress("127.0.0.1", port), 3000)
+                s.soTimeout = 12000
+                val o = s.getOutputStream(); val i = s.getInputStream()
+                o.write(byteArrayOf(5, 1, 0)); o.flush()
+                val r = ByteArray(2)
+                if (i.read(r) != 2 || r[1].toInt() != 0) return "the local proxy did not answer"
+                o.write(byteArrayOf(5, 1, 0, 1, 1, 1, 1, 1, 0, 80)); o.flush()
+                val rep = ByteArray(10)
+                var n = 0
+                while (n < 10) { val k = i.read(rep, n, 10 - n); if (k < 0) return "the server closed the connection"; n += k }
+                if (rep[1].toInt() != 0) return "the server could not reach the internet (code ${rep[1]})"
+                o.write("GET / HTTP/1.0\r\nHost: 1.1.1.1\r\n\r\n".toByteArray()); o.flush()
+                val b = ByteArray(16)
+                val k = i.read(b)
+                return if (k > 0) "" else "the server did not send any data back"
+            }
+        } catch (e: java.net.SocketTimeoutException) {
+            return "the server did not answer in time"
+        } catch (e: Throwable) {
+            return "test connection failed (${e.javaClass.simpleName})"
+        }
+    }
+
     /** True when Android still needs to show its one-time "connection request" box. */
     fun consentIntent(context: Context): Intent? = VpnService.prepare(context)
 

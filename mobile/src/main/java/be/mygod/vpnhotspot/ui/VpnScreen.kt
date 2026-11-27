@@ -97,6 +97,13 @@ fun VpnScreen(hotspotIfaces: Collection<String>) {
                                         val port = XrayController.startPhoneEngine(it)
                                         if (port == null) PhoneVpn.setStatus("This device is not on the VPN (the engine did not start). Sharing still works.")
                                         else {
+                                            val bad = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { PhoneVpn.serverCheck(port) }
+                                            if (bad.isNotEmpty()) {
+                                                XrayController.stopPhoneEngine()
+                                                XrayController.appendLog("Phone VPN not started: $bad")
+                                                PhoneVpn.setStatus("This device was NOT put on the VPN, so its internet keeps working: $bad. Check the server and the link. Sharing to other devices may fail too.")
+                                                return@let
+                                            }
                                             pendingPort = port
                                             allow = !XrayController.useProxy()
                                             val ask = PhoneVpn.consentIntent(context)

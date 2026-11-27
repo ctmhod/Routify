@@ -223,7 +223,7 @@
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="be.mygod.vpnhotspot.log"
+            android:authorities="${applicationId}.log"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

@@ -144,7 +144,7 @@ object DaemonController {
         }
         daemonStdioClosing = false
         daemonStdioEofReported = false
-        val socketName = "be.mygod.vpnhotspot.${Process.myPid()}.${Random.nextLong().toHexString()}"
+        val socketName = "${app.packageName}.${Process.myPid()}.${Random.nextLong().toHexString()}"
         var stdout: ParcelFileDescriptor? = null
         var stderr: ParcelFileDescriptor? = null
         try {

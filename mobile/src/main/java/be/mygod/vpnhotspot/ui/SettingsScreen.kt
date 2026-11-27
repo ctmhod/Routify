@@ -727,7 +727,7 @@ private suspend fun shareLogcat(context: Context) {
             if (e !is CancellationException) Timber.w(e)
             PrintWriter(FileOutputStream(logFile, true)).use { e.printStackTrace(it) }
         }
-        FileProvider.getUriForFile(context, "be.mygod.vpnhotspot.log", logFile)
+        FileProvider.getUriForFile(context, context.packageName + ".log", logFile)
     }
     context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND)
         .setType("text/x-log")

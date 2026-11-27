@@ -26,6 +26,8 @@ object XrayController {
     private const val UDP_PORT = 12347
     const val HTTP_PORT = 8080
     const val SOCKS_PORT = 1080
+    /** Local SOCKS port of the separate engine this phone uses when root mode is on. */
+    const val PHONE_PORT = 1081
     /** Bit 25: marks UDP that TPROXY hands to Xray (routed to loopback by a policy rule). */
     private const val TMARK = 0x2000000
     private const val UCHAIN = "ROUTIFY_UDP"
@@ -62,6 +64,53 @@ object XrayController {
         get() = prefs.getString("dns_server", null)?.takeIf { isIpv4(it) } ?: "1.1.1.1"
         set(v) = prefs.edit().putString("dns_server", v).apply()
     fun isIpv4(s: String) = Regex("^((25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])$").matches(s)
+    /** Off: Connect shares to other devices only. On: this phone or tablet is on the VPN too. */
+    var phoneVpn: Boolean
+        get() = prefs.getBoolean("phone_vpn", false)
+        set(v) = prefs.edit().putBoolean("phone_vpn", v).apply()
+
+    private var phoneProc: java.lang.Process? = null
+
+    /**
+     * Engine for this device's own traffic. Proxy mode already has one on SOCKS 1080; in root mode the sharing engine runs
+     * as root, so this device gets its own engine that runs as Routify (which the VPN skips, so there is no loop).
+     * Returns the local SOCKS port, or null when the engine did not start.
+     */
+    suspend fun startPhoneEngine(server: XrayServer): Int? {
+        try {
+            if (proxyProc?.isAlive == true) return SOCKS_PORT
+            val lib = withContext(Dispatchers.IO) { prepareBinary() } ?: return null
+            stopPhoneEngine()
+            val resolved = withContext(Dispatchers.IO) { pinIfNeeded(resolve(server)) }
+            return withContext(Dispatchers.IO) {
+                File(dir, "phone.json").writeText(config(resolved, proxy = true, phone = true))
+                val pb = ProcessBuilder("/system/bin/sh", "-c",
+                    "echo \$\$ > ${quote(File(dir, "phone.pid").absolutePath)}; exec ${quote(lib)} run -c ${quote(File(dir, "phone.json").absolutePath)}")
+                    .directory(dir).redirectErrorStream(true).redirectOutput(File(dir, "phone.log"))
+                pb.environment()["XRAY_LOCATION_ASSET"] = dir.absolutePath
+                phoneProc = pb.start()
+                Thread.sleep(1200)
+                if (phoneProc?.isAlive == true) PHONE_PORT else null
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            appendLog("Phone engine: ${e.javaClass.simpleName}")
+            return null
+        }
+    }
+
+    fun stopPhoneEngine() {
+        try { phoneProc?.destroy() } catch (_: Throwable) { }
+        phoneProc = null
+        try {
+            File(dir, "phone.pid").takeIf { it.exists() }?.readText()?.trim()?.toIntOrNull()?.let {
+                if (try { File("/proc/$it/cmdline").readText().contains("libxray") } catch (_: Throwable) { false }) android.os.Process.killProcess(it)
+            }
+            File(dir, "phone.pid").delete()
+        } catch (_: Throwable) { }
+    }
+
     /** Xray log level: warning, info or debug. */
     var logLevel: String
         get() = prefs.getString("log_level", null)?.takeIf { it in LOG_LEVELS } ?: "warning"
@@ -78,9 +127,12 @@ object XrayController {
         prefs.edit().putString("direct_macs", JSONArray(m.toList()).toString()).apply()
     }
 
-    private fun config(server: XrayServer, proxy: Boolean = false): String {
+    private fun config(server: XrayServer, proxy: Boolean = false, phone: Boolean = false): String {
         val inbounds = JSONArray()
-        if (proxy) {
+        if (phone) {
+            inbounds.put(JSONObject().put("tag", "socks-in").put("port", PHONE_PORT).put("listen", "127.0.0.1")
+                .put("protocol", "socks").put("settings", JSONObject().put("udp", true).put("auth", "noauth")))
+        } else if (proxy) {
             inbounds.put(JSONObject().put("tag", "http-in").put("port", HTTP_PORT).put("listen", "0.0.0.0")
                 .put("protocol", "http").put("settings", JSONObject()))
             inbounds.put(JSONObject().put("tag", "socks-in").put("port", SOCKS_PORT).put("listen", "0.0.0.0")
@@ -102,7 +154,7 @@ object XrayController {
         return JSONObject()
             .put("log", JSONObject().put("loglevel", logLevel))
             .put("inbounds", inbounds)
-            .put("outbounds", JSONArray().put(server.outbound(mark = !proxy)))
+            .put("outbounds", JSONArray().put(server.outbound(mark = !proxy && !phone)))
             .toString()
     }
 
@@ -197,6 +249,25 @@ object XrayController {
             .flatMap { n -> n.inetAddresses.toList().filterIsInstance<java.net.Inet4Address>().filter { it.isSiteLocalAddress }
                 .map { it.hostAddress ?: "" } }
             .filter { it.isNotEmpty() }
+    } catch (_: Throwable) { emptyList() }
+
+    /**
+     * Interfaces that share the internet with other devices, found from the system. The tethering list can miss
+     * the Wi-Fi repeater (Wi-Fi Direct group) on some tablets, so root mode also looks for them here.
+     */
+    fun detectSharingIfaces(): List<String> = try {
+        val upstream = try {
+            File("/proc/net/route").readLines().drop(1).map { it.split('\t') }
+                .filter { it.size > 8 && it[1] == "00000000" && it[7] == "00000000" }.map { it[0] }.toSet()
+        } catch (_: Throwable) { emptySet() }
+        val name = Regex("^(ap[0-9]*|swlan[0-9]*|softap[0-9]*|p2p[-0-9a-z]*|wlan[1-9][0-9]*|rndis[0-9]*|usb[0-9]*|bt-pan|eth[0-9]*)$")
+        java.net.NetworkInterface.getNetworkInterfaces().toList().filter { i ->
+            i.isUp && !i.isLoopback && name.matches(i.name) && i.name !in upstream &&
+                i.interfaceAddresses.any { a ->
+                    val ad = a.address
+                    ad is java.net.Inet4Address && (ad.isSiteLocalAddress)
+                }
+        }.map { it.name }
     } catch (_: Throwable) { emptyList() }
 
     /** Proxy mode: no root needed. Connected devices set an HTTP proxy in their Wi-Fi settings. */
@@ -400,6 +471,8 @@ object XrayController {
     }
 
     suspend fun stop() {
+        PhoneVpn.stop()
+        stopPhoneEngine()
         if (proxyProc != null || useProxy() || File(dir, "state").takeIf { it.exists() }?.readText()?.trim() == "proxy") {
             stopProxyProcess()
             _running.value = false
@@ -407,6 +480,7 @@ object XrayController {
             try { File(dir, "state").writeText("stopped") } catch (_: Throwable) { }
             return
         }
+        try { XrayService.stop() } catch (_: Throwable) { }
         try {
             RootManager.use { it.execute(RunShell(stopScript(dir.absolutePath) + "\necho stopped > ${dir.absolutePath}/state; chmod a+r ${dir.absolutePath}/state")) }
             refresh()

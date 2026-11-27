@@ -14,3 +14,5 @@ Routify uses Xray-core for VLESS/VMess connections
   https://github.com/XTLS/Xray-core
   Licensed under the Mozilla Public License 2.0.
   Any modified Xray-core source files must be published under the MPL 2.0.
+
+hev-socks5-tunnel (MIT license), https://github.com/heiher/hev-socks5-tunnel : used to put this device on the VPN. Built from its public source in the GitHub build.

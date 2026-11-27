@@ -26,7 +26,7 @@ class XrayService : Service() {
         }
         val n = Notification.Builder(this, CHANNEL)
   .setContentTitle("Routify is on")
-  .setContentText("Proxy running (HTTP 8080, SOCKS 1080). Tap to open.")
+  .setContentText("Routify is running in the background. Tap to open.")
   .setSmallIcon(R.drawable.ic_route)
   .setOngoing(true)
   .setContentIntent(open)

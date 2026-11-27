@@ -57,6 +57,35 @@ fun VpnDnsRow() {
 }
 
 @Composable
+fun VpnCoverageRow() {
+    var phone by remember { mutableStateOf(XrayController.phoneVpn) }
+    var edit by remember { mutableStateOf(false) }
+    PreferenceRow(
+        icon = R.drawable.ic_route,
+        title = "What Connect covers",
+        summary = (if (phone) "This device and other devices" else "Other devices only") + ". Applies next time you connect.",
+        onClick = { edit = true },
+    )
+    if (edit) AlertDialog(
+        onDismissRequest = { edit = false },
+        title = { Text("What Connect covers") },
+        text = {
+            Column {
+                TextButton(onClick = { XrayController.phoneVpn = false; phone = false; edit = false }) {
+                    Text(if (!phone) "Other devices only (selected)" else "Other devices only")
+                }
+                TextButton(onClick = { XrayController.phoneVpn = true; phone = true; edit = false }) {
+                    Text(if (phone) "This device and other devices (selected)" else "This device and other devices")
+                }
+                Text("The second option also puts this phone or tablet on the VPN, like a normal VPN app. Android asks for permission the first time.")
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = { edit = false }) { Text("Cancel") } },
+    )
+}
+
+@Composable
 fun VpnLogRow() {
     var level by remember { mutableStateOf(XrayController.logLevel) }
     var editLevel by remember { mutableStateOf(false) }

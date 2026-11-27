@@ -17,8 +17,10 @@ The app has four tabs:
 
 - **Root mode**: all TCP and DNS traffic from hotspot devices is redirected through the server. UDP is proxied too when the phone's kernel supports TPROXY.
 - **Proxy mode (no root)**: Routify opens a local proxy (HTTP on port 8080, SOCKS on port 1080). Devices on your hotspot set it as the proxy in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered.
+- The proxy has no username or password on purpose: anyone who can reach your hotspot network can use it.
 - **Auto** (default) uses root mode when root works and proxy mode otherwise.
-- While the proxy is on, a notification keeps Routify running in the background.
+- **Settings > What Connect covers**: "Other devices only" (default) or "This device and other devices". The second option also puts this phone or tablet on the VPN, like a normal VPN app. Android asks for permission the first time. Routify itself is left out of the VPN so there is no loop.
+- While the VPN is on, a notification keeps Routify running in the background.
 
 ### Untrusted server certificate
 

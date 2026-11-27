@@ -350,6 +350,7 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
             row("routify_limits_defaults") {
                 DefaultLimitsRow()
             }
+            row("routify_vpn_cover") { VpnCoverageRow() }
             row("routify_vpn_dns") { VpnDnsRow() }
             row("routify_vpn_log") { VpnLogRow() }
             row("routify_theme") { ThemeRow() }

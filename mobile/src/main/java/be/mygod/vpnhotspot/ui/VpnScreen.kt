@@ -12,6 +12,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import be.mygod.vpnhotspot.xray.PhoneVpn
 import be.mygod.vpnhotspot.xray.XrayController
 import be.mygod.vpnhotspot.xray.XrayServer
 import kotlinx.coroutines.launch
@@ -27,6 +31,15 @@ fun VpnScreen(hotspotIfaces: Collection<String>) {
     var selected by remember { mutableIntStateOf(XrayController.selected) }
     val running by XrayController.running.collectAsState()
     val status by XrayController.message.collectAsState()
+    val phoneStatus by PhoneVpn.status.collectAsState()
+    var pendingPort by remember { mutableIntStateOf(XrayController.SOCKS_PORT) }
+    var allow by remember { mutableStateOf(false) }
+    val vpnConsent = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        if (r.resultCode == Activity.RESULT_OK) PhoneVpn.begin(pendingPort, allow) else {
+            XrayController.stopPhoneEngine()
+            PhoneVpn.setStatus("This device is not on the VPN (permission not given). Sharing still works.")
+        }
+    }
     var logText by remember { mutableStateOf(XrayController.crashLog() + XrayController.readLog()) }
     LaunchedEffect(Unit) { XrayController.installCrashLog(); XrayController.refresh(); XrayController.detectRoot() }
     val root by XrayController.rootAvailable.collectAsState()
@@ -68,6 +81,7 @@ fun VpnScreen(hotspotIfaces: Collection<String>) {
                     Column(Modifier.weight(1f)) {
                         Text(if (running) "VPN is on" else "VPN is off", style = MaterialTheme.typography.titleMedium)
                         Text(status, style = MaterialTheme.typography.bodySmall)
+                        if (phoneStatus.isNotEmpty()) Text(phoneStatus, style = MaterialTheme.typography.bodySmall)
                         Text(if (proxyMode) "Proxy mode (no root): devices on your hotspot set the proxy below in their Wi-Fi settings. Only apps that follow the Wi-Fi proxy are covered (browsers do, many apps and games do not)."
                         else "Transparent mode (root): hotspot TCP, DNS and UDP go through the server with no settings on the other device. UDP needs kernel TPROXY support.",
                             style = MaterialTheme.typography.bodySmall)
@@ -77,7 +91,18 @@ fun VpnScreen(hotspotIfaces: Collection<String>) {
                             try {
                                 if (running) XrayController.stop()
                                 else servers.getOrNull(selected)?.let {
-                                    if (proxyMode) XrayController.startProxy(it) else XrayController.start(it, hotspotIfaces)
+                                    PhoneVpn.setStatus("")
+                                    if (proxyMode) XrayController.startProxy(it) else XrayController.start(it, (hotspotIfaces + XrayController.detectSharingIfaces()).distinct())
+                                    if (XrayController.phoneVpn && XrayController.running.value) {
+                                        val port = XrayController.startPhoneEngine(it)
+                                        if (port == null) PhoneVpn.setStatus("This device is not on the VPN (the engine did not start). Sharing still works.")
+                                        else {
+                                            pendingPort = port
+                                            allow = !XrayController.useProxy()
+                                            val ask = PhoneVpn.consentIntent(context)
+                                            if (ask != null) vpnConsent.launch(ask) else PhoneVpn.begin(port, !XrayController.useProxy())
+                                        }
+                                    }
                                 }
                                 addresses = XrayController.hotspotAddresses()
                             } catch (e: kotlinx.coroutines.CancellationException) {

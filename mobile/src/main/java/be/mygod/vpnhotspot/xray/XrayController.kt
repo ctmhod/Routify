@@ -77,6 +77,41 @@ object XrayController {
         set(v) = prefs.edit().putBoolean("block_on_fail", v).apply()
 
     @Volatile private var waitReason: String = ""
+    @Volatile private var lastResolved: XrayServer? = null
+
+    /**
+     * Sends one plain WebSocket upgrade request (no id, no secrets) to the server and reports the HTTP status line, because Xray
+     * only logs a wrong path or host at info level. Empty when the link is not WebSocket.
+     */
+    fun probeWs(): String {
+        val s = lastResolved ?: return ""
+        if (s.network != "ws") return ""
+        val path = s.path.ifEmpty { "/" }
+        return try {
+            val name = s.sni.ifEmpty { s.wsHost.ifEmpty { s.host } }
+            val sock: java.net.Socket = java.net.Socket().apply { connect(java.net.InetSocketAddress(s.host, s.port), 6000); soTimeout = 6000 }
+            val io: java.net.Socket = if (s.security == "tls") {
+                val trustAll = object : javax.net.ssl.X509TrustManager {
+                    override fun checkClientTrusted(c: Array<java.security.cert.X509Certificate>?, a: String?) {}
+                    override fun checkServerTrusted(c: Array<java.security.cert.X509Certificate>?, a: String?) {}
+                    override fun getAcceptedIssuers() = arrayOf<java.security.cert.X509Certificate>()
+                }
+                val ctx = javax.net.ssl.SSLContext.getInstance("TLS").apply { init(null, arrayOf(trustAll), null) }
+                val ssl = ctx.socketFactory.createSocket(sock, name, s.port, true) as javax.net.ssl.SSLSocket
+                ssl.sslParameters = ssl.sslParameters.apply {
+                    if (!Regex("^[0-9.]+$").matches(name) && ':' !in name) serverNames = listOf(javax.net.ssl.SNIHostName(name))
+                    applicationProtocols = arrayOf("http/1.1")
+                }
+                ssl.startHandshake(); ssl
+            } else sock
+            io.getOutputStream().write(("GET $path HTTP/1.1\r\nHost: ${s.wsHost.ifEmpty { name }}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
+                "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n").toByteArray())
+            io.getOutputStream().flush()
+            val line = io.getInputStream().bufferedReader().readLine() ?: "no answer"
+            io.close()
+            "WebSocket check on path \"$path\": server answered \"${line.take(60)}\" (101 means the path is right)."
+        } catch (e: Throwable) { "WebSocket check failed: ${e.javaClass.simpleName}" }
+    }
 
     private var phoneProc: java.lang.Process? = null
 
@@ -98,6 +133,7 @@ object XrayController {
             val lib = withContext(Dispatchers.IO) { prepareBinary() } ?: return null
             stopPhoneEngine()
             val resolved = withContext(Dispatchers.IO) { pinIfNeeded(resolve(server)) }
+            lastResolved = resolved
             return withContext(Dispatchers.IO) {
                 File(dir, "phone.json").writeText(config(resolved, proxy = true, phone = true))
                 val pb = ProcessBuilder("/system/bin/sh", "-c",
@@ -192,6 +228,7 @@ object XrayController {
         val name = s.sni.ifEmpty { s.wsHost.ifEmpty { s.host } }
         return s.copy(
             host = ip,
+            hostName = s.host,
             sni = if (s.security != "none") name else s.sni,
             wsHost = if (s.network == "ws" && s.wsHost.isEmpty()) s.host else s.wsHost,
         )
@@ -203,7 +240,11 @@ object XrayController {
      * right now and pin it by its SHA-256 hash. That accepts an expired or self-made certificate, but only that exact one.
      */
     private fun pinIfNeeded(s: XrayServer): XrayServer {
-        if (s.security != "tls" || s.pin.isNotEmpty() || !(s.insecure || allowInsecure)) return s
+        val tlsName = s.sni.ifEmpty { s.wsHost.ifEmpty { s.host } }
+        // Links often set sni= (and a Host header) to a different name than the server's own, while the server shows
+        // its own certificate. When the certificate is valid for the server's real name, pin it automatically.
+        val auto = !(s.insecure || allowInsecure) && s.hostName.isNotEmpty() && !tlsName.equals(s.hostName, true)
+        if (s.security != "tls" || s.pin.isNotEmpty() || !(s.insecure || allowInsecure || auto)) return s
         return try {
             val trustAll = object : javax.net.ssl.X509TrustManager {
                 override fun checkClientTrusted(c: Array<java.security.cert.X509Certificate>?, a: String?) {}
@@ -220,8 +261,25 @@ object XrayController {
                 if (!Regex("^[0-9.]+$").matches(name) && ':' !in name) serverNames = listOf(javax.net.ssl.SNIHostName(name))
             }
             ssl.startHandshake()
-            val leaf = ssl.session.peerCertificates[0].encoded
+            val chain = ssl.session.peerCertificates
+            val leaf = chain[0].encoded
             ssl.close()
+            if (auto) {
+                val x = chain[0] as java.security.cert.X509Certificate
+                if (!certMatches(x, s.hostName)) {
+                    appendLog("The server's certificate is not valid for ${s.hostName} either, so strict checking stays on. If you trust this server, turn on Settings > Allow untrusted server certificate.")
+                    return s
+                }
+                val trusted = try {
+                    val f = javax.net.ssl.TrustManagerFactory.getInstance(javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm())
+                    f.init(null as java.security.KeyStore?)
+                    f.trustManagers.filterIsInstance<javax.net.ssl.X509TrustManager>().first()
+                        .checkServerTrusted(chain.map { it as java.security.cert.X509Certificate }.toTypedArray(), "RSA")
+                    true
+                } catch (_: Throwable) { false }
+                appendLog("The link's name (sni=$tlsName) differs from the server name ${s.hostName}. The certificate is valid for ${s.hostName}" +
+                    (if (trusted) " and trusted by Android" else " but its issuer is not in Android's trust list") + ", so Routify accepts exactly this certificate.")
+            }
             val hex = java.security.MessageDigest.getInstance("SHA-256").digest(leaf).joinToString("") { "%02x".format(it) }
             appendLog("Untrusted certificates allowed: pinned the server certificate (${hex.take(12)}...)")
             s.copy(pin = hex)
@@ -229,6 +287,13 @@ object XrayController {
             appendLog("Could not read the server certificate to pin it: ${e.javaClass.simpleName}")
             s
         }
+    }
+
+    /** True when the certificate lists [host] (exact or one-level wildcard) as a DNS name, or has it as CN when it lists no names. */
+    private fun certMatches(c: java.security.cert.X509Certificate, host: String): Boolean {
+        val names = try { c.subjectAlternativeNames?.filter { it[0] == 2 }?.map { it[1].toString() } } catch (_: Throwable) { null } ?: emptyList()
+        val list = names.ifEmpty { listOfNotNull(Regex("CN=([^,]+)").find(c.subjectX500Principal.name)?.groupValues?.get(1)) }
+        return list.any { n -> n.equals(host, true) || (n.startsWith("*.") && host.substringAfter('.', "").equals(n.drop(2), true)) }
     }
 
     private fun linker() = if (Process.is64Bit()) "/system/bin/linker64" else "/system/bin/linker"
@@ -295,6 +360,7 @@ object XrayController {
             if (lib == null) { _message.value = "Xray engine missing from this build"; return }
             stopProxyProcess()
             val resolved = withContext(Dispatchers.IO) { pinIfNeeded(resolve(server)) }
+            lastResolved = resolved
             appendLog("Link: ${server.describe()} | used: TLS name=${resolved.sni.ifEmpty { resolved.wsHost.ifEmpty { resolved.host } }} hostHeader=${resolved.wsHost} address=${resolved.host}")
             withContext(Dispatchers.IO) {
                 File(dir, "config.json").writeText(config(resolved, proxy = true))
@@ -456,6 +522,7 @@ object XrayController {
         if (lib == null) { _message.value = "Xray engine missing from this build"; return }
         if (ifaces.isEmpty()) { _message.value = "Start the hotspot first"; return }
         val resolved = withContext(Dispatchers.IO) { pinIfNeeded(resolve(server)) }
+        lastResolved = resolved
         appendLog("Link: ${server.describe()} | used: TLS name=${resolved.sni.ifEmpty { resolved.wsHost.ifEmpty { resolved.host } }} hostHeader=${resolved.wsHost} address=${resolved.host}")
         val cfg = android.util.Base64.encodeToString(config(resolved).toByteArray(), android.util.Base64.NO_WRAP)
         val d = dir.absolutePath
@@ -530,7 +597,7 @@ object XrayController {
             if (bad.isEmpty()) applyRules(true)
             else {
                 waitReason = bad
-                appendLog("Server test failed: $bad. Not redirecting other devices. ${logExcerpt("xray.log")}")
+                appendLog("Server test failed: $bad. Not redirecting other devices. ${logExcerpt("xray.log")} ${withContext(Dispatchers.IO) { probeWs() }}")
             }
         }
         refresh()

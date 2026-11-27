@@ -27,6 +27,7 @@ data class XrayServer(
     val vmessCipher: String = "auto",
     val insecure: Boolean = false, // allowInsecure=1 in the link (Routify pins the server certificate instead)
     val pin: String = "",          // pcs= in the link: SHA-256 of the server certificate
+    val hostName: String = "",     // the server's own DNS name (kept when [host] is replaced by its IP)
 ) {
     /** Only xtls-rprx-vision is a real flow, and only over plain TCP. Links that say flow=none must not send it to Xray. */
     private fun flowOk() = flow.startsWith("xtls-rprx-vision") && network == "tcp"
@@ -85,6 +86,8 @@ data class XrayServer(
 
     companion object {
         private fun dec(s: String) = URLDecoder.decode(s, "UTF-8")
+        /** Some generators encode twice, so a path like /vpnjantit arrives as %2Fvpnjantit. Servers never want a literal %XX in a path. */
+        private fun fixEnc(s: String) = if (Regex("%[0-9a-fA-F]{2}").containsMatchIn(s)) try { dec(s) } catch (_: Exception) { s } else s
 
         /** Returns null if the text is not a valid vless:// or vmess:// link. */
         fun parse(text: String): XrayServer? = try {
@@ -104,8 +107,8 @@ data class XrayServer(
                 .associate { dec(it.substringBefore('=')) to dec(it.substringAfter('=')) }
             return XrayServer("vless", dec(u.rawFragment ?: host), host, u.port, u.userInfo,
                 network = (q["type"] ?: "tcp").let { if (it == "websocket") "ws" else it },
-                security = q["security"] ?: "none", sni = q["sni"] ?: q["peer"] ?: "",
-                wsHost = q["host"] ?: "", path = q["path"] ?: q["serviceName"] ?: "",
+                security = q["security"] ?: "none", sni = fixEnc(q["sni"] ?: q["peer"] ?: ""),
+                wsHost = fixEnc(q["host"] ?: ""), path = fixEnc(q["path"] ?: q["serviceName"] ?: ""),
                 flow = q["flow"] ?: "", alpn = q["alpn"] ?: "", fingerprint = q["fp"] ?: "",
                 publicKey = q["pbk"] ?: "", shortId = q["sid"] ?: "",
                 insecure = (q["allowInsecure"] ?: q["insecure"]) in listOf("1", "true"),

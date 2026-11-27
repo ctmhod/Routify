@@ -1,0 +1,272 @@
+name: Release v0.3.31
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager "platforms;android-37.0" "build-tools;37.0.0" "ndk;29.0.14206865"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
+
+      - name: Install Android Rust targets
+        run: rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Apply the phone VPN change
+        run: |
+          base64 -d > /tmp/phonevpn.diff <<'B64_EOF'
+          ZGlmZiAtLWdpdCBhL21vYmlsZS9zcmMvbWFpbi9qYXZhL2JlL215Z29kL3ZwbmhvdHNwb3QveHJheS9YcmF5Q29udHJvbGxlci5r
+          dCBiL21vYmlsZS9zcmMvbWFpbi9qYXZhL2JlL215Z29kL3ZwbmhvdHNwb3QveHJheS9YcmF5Q29udHJvbGxlci5rdAppbmRleCA1
+          NGY3ZDUwLi40NzI5OGVhIDEwMDY0NAotLS0gYS9tb2JpbGUvc3JjL21haW4vamF2YS9iZS9teWdvZC92cG5ob3RzcG90L3hyYXkv
+          WHJheUNvbnRyb2xsZXIua3QKKysrIGIvbW9iaWxlL3NyYy9tYWluL2phdmEvYmUvbXlnb2QvdnBuaG90c3BvdC94cmF5L1hyYXlD
+          b250cm9sbGVyLmt0CkBAIC0xOTIsNiArMTkyLDcgQEAgb2JqZWN0IFhyYXlDb250cm9sbGVyIHsKICAgICAgICAgdmFsIG5hbWUg
+          PSBzLnNuaS5pZkVtcHR5IHsgcy53c0hvc3QuaWZFbXB0eSB7IHMuaG9zdCB9IH0KICAgICAgICAgcmV0dXJuIHMuY29weSgKICAg
+          ICAgICAgICAgIGhvc3QgPSBpcCwKKyAgICAgICAgICAgIGhvc3ROYW1lID0gcy5ob3N0LAogICAgICAgICAgICAgc25pID0gaWYg
+          KHMuc2VjdXJpdHkgIT0gIm5vbmUiKSBuYW1lIGVsc2Ugcy5zbmksCiAgICAgICAgICAgICB3c0hvc3QgPSBpZiAocy5uZXR3b3Jr
+          ID09ICJ3cyIgJiYgcy53c0hvc3QuaXNFbXB0eSgpKSBzLmhvc3QgZWxzZSBzLndzSG9zdCwKICAgICAgICAgKQpAQCAtMjAzLDcg
+          KzIwNCwxMSBAQCBvYmplY3QgWHJheUNvbnRyb2xsZXIgewogICAgICAqIHJpZ2h0IG5vdyBhbmQgcGluIGl0IGJ5IGl0cyBTSEEt
+          MjU2IGhhc2guIFRoYXQgYWNjZXB0cyBhbiBleHBpcmVkIG9yIHNlbGYtbWFkZSBjZXJ0aWZpY2F0ZSwgYnV0IG9ubHkgdGhhdCBl
+          eGFjdCBvbmUuCiAgICAgICovCiAgICAgcHJpdmF0ZSBmdW4gcGluSWZOZWVkZWQoczogWHJheVNlcnZlcik6IFhyYXlTZXJ2ZXIg
+          ewotICAgICAgICBpZiAocy5zZWN1cml0eSAhPSAidGxzIiB8fCBzLnBpbi5pc05vdEVtcHR5KCkgfHwgIShzLmluc2VjdXJlIHx8
+          IGFsbG93SW5zZWN1cmUpKSByZXR1cm4gcworICAgICAgICB2YWwgdGxzTmFtZSA9IHMuc25pLmlmRW1wdHkgeyBzLndzSG9zdC5p
+          ZkVtcHR5IHsgcy5ob3N0IH0gfQorICAgICAgICAvLyBMaW5rcyBvZnRlbiBzZXQgc25pPSAoYW5kIGEgSG9zdCBoZWFkZXIpIHRv
+          IGEgZGlmZmVyZW50IG5hbWUgdGhhbiB0aGUgc2VydmVyJ3Mgb3duLCB3aGlsZSB0aGUgc2VydmVyIHNob3dzCisgICAgICAgIC8v
+          IGl0cyBvd24gY2VydGlmaWNhdGUuIFdoZW4gdGhlIGNlcnRpZmljYXRlIGlzIHZhbGlkIGZvciB0aGUgc2VydmVyJ3MgcmVhbCBu
+          YW1lLCBwaW4gaXQgYXV0b21hdGljYWxseS4KKyAgICAgICAgdmFsIGF1dG8gPSAhKHMuaW5zZWN1cmUgfHwgYWxsb3dJbnNlY3Vy
+          ZSkgJiYgcy5ob3N0TmFtZS5pc05vdEVtcHR5KCkgJiYgIXRsc05hbWUuZXF1YWxzKHMuaG9zdE5hbWUsIHRydWUpCisgICAgICAg
+          IGlmIChzLnNlY3VyaXR5ICE9ICJ0bHMiIHx8IHMucGluLmlzTm90RW1wdHkoKSB8fCAhKHMuaW5zZWN1cmUgfHwgYWxsb3dJbnNl
+          Y3VyZSB8fCBhdXRvKSkgcmV0dXJuIHMKICAgICAgICAgcmV0dXJuIHRyeSB7CiAgICAgICAgICAgICB2YWwgdHJ1c3RBbGwgPSBv
+          YmplY3QgOiBqYXZheC5uZXQuc3NsLlg1MDlUcnVzdE1hbmFnZXIgewogICAgICAgICAgICAgICAgIG92ZXJyaWRlIGZ1biBjaGVj
+          a0NsaWVudFRydXN0ZWQoYzogQXJyYXk8amF2YS5zZWN1cml0eS5jZXJ0Llg1MDlDZXJ0aWZpY2F0ZT4/LCBhOiBTdHJpbmc/KSB7
+          fQpAQCAtMjIwLDggKzIyNSwyNSBAQCBvYmplY3QgWHJheUNvbnRyb2xsZXIgewogICAgICAgICAgICAgICAgIGlmICghUmVnZXgo
+          Il5bMC05Ll0rJCIpLm1hdGNoZXMobmFtZSkgJiYgJzonICFpbiBuYW1lKSBzZXJ2ZXJOYW1lcyA9IGxpc3RPZihqYXZheC5uZXQu
+          c3NsLlNOSUhvc3ROYW1lKG5hbWUpKQogICAgICAgICAgICAgfQogICAgICAgICAgICAgc3NsLnN0YXJ0SGFuZHNoYWtlKCkKLSAg
+          ICAgICAgICAgIHZhbCBsZWFmID0gc3NsLnNlc3Npb24ucGVlckNlcnRpZmljYXRlc1swXS5lbmNvZGVkCisgICAgICAgICAgICB2
+          YWwgY2hhaW4gPSBzc2wuc2Vzc2lvbi5wZWVyQ2VydGlmaWNhdGVzCisgICAgICAgICAgICB2YWwgbGVhZiA9IGNoYWluWzBdLmVu
+          Y29kZWQKICAgICAgICAgICAgIHNzbC5jbG9zZSgpCisgICAgICAgICAgICBpZiAoYXV0bykgeworICAgICAgICAgICAgICAgIHZh
+          bCB4ID0gY2hhaW5bMF0gYXMgamF2YS5zZWN1cml0eS5jZXJ0Llg1MDlDZXJ0aWZpY2F0ZQorICAgICAgICAgICAgICAgIGlmICgh
+          Y2VydE1hdGNoZXMoeCwgcy5ob3N0TmFtZSkpIHsKKyAgICAgICAgICAgICAgICAgICAgYXBwZW5kTG9nKCJUaGUgc2VydmVyJ3Mg
+          Y2VydGlmaWNhdGUgaXMgbm90IHZhbGlkIGZvciAke3MuaG9zdE5hbWV9IGVpdGhlciwgc28gc3RyaWN0IGNoZWNraW5nIHN0YXlz
+          IG9uLiBJZiB5b3UgdHJ1c3QgdGhpcyBzZXJ2ZXIsIHR1cm4gb24gU2V0dGluZ3MgPiBBbGxvdyB1bnRydXN0ZWQgc2VydmVyIGNl
+          cnRpZmljYXRlLiIpCisgICAgICAgICAgICAgICAgICAgIHJldHVybiBzCisgICAgICAgICAgICAgICAgfQorICAgICAgICAgICAg
+          ICAgIHZhbCB0cnVzdGVkID0gdHJ5IHsKKyAgICAgICAgICAgICAgICAgICAgdmFsIGYgPSBqYXZheC5uZXQuc3NsLlRydXN0TWFu
+          YWdlckZhY3RvcnkuZ2V0SW5zdGFuY2UoamF2YXgubmV0LnNzbC5UcnVzdE1hbmFnZXJGYWN0b3J5LmdldERlZmF1bHRBbGdvcml0
+          aG0oKSkKKyAgICAgICAgICAgICAgICAgICAgZi5pbml0KG51bGwgYXMgamF2YS5zZWN1cml0eS5LZXlTdG9yZT8pCisgICAgICAg
+          ICAgICAgICAgICAgIGYudHJ1c3RNYW5hZ2Vycy5maWx0ZXJJc0luc3RhbmNlPGphdmF4Lm5ldC5zc2wuWDUwOVRydXN0TWFuYWdl
+          cj4oKS5maXJzdCgpCisgICAgICAgICAgICAgICAgICAgICAgICAuY2hlY2tTZXJ2ZXJUcnVzdGVkKGNoYWluLm1hcCB7IGl0IGFz
+          IGphdmEuc2VjdXJpdHkuY2VydC5YNTA5Q2VydGlmaWNhdGUgfS50b1R5cGVkQXJyYXkoKSwgIlJTQSIpCisgICAgICAgICAgICAg
+          ICAgICAgIHRydWUKKyAgICAgICAgICAgICAgICB9IGNhdGNoIChfOiBUaHJvd2FibGUpIHsgZmFsc2UgfQorICAgICAgICAgICAg
+          ICAgIGFwcGVuZExvZygiVGhlIGxpbmsncyBuYW1lIChzbmk9JHRsc05hbWUpIGRpZmZlcnMgZnJvbSB0aGUgc2VydmVyIG5hbWUg
+          JHtzLmhvc3ROYW1lfS4gVGhlIGNlcnRpZmljYXRlIGlzIHZhbGlkIGZvciAke3MuaG9zdE5hbWV9IiArCisgICAgICAgICAgICAg
+          ICAgICAgIChpZiAodHJ1c3RlZCkgIiBhbmQgdHJ1c3RlZCBieSBBbmRyb2lkIiBlbHNlICIgYnV0IGl0cyBpc3N1ZXIgaXMgbm90
+          IGluIEFuZHJvaWQncyB0cnVzdCBsaXN0IikgKyAiLCBzbyBSb3V0aWZ5IGFjY2VwdHMgZXhhY3RseSB0aGlzIGNlcnRpZmljYXRl
+          LiIpCisgICAgICAgICAgICB9CiAgICAgICAgICAgICB2YWwgaGV4ID0gamF2YS5zZWN1cml0eS5NZXNzYWdlRGlnZXN0LmdldElu
+          c3RhbmNlKCJTSEEtMjU2IikuZGlnZXN0KGxlYWYpLmpvaW5Ub1N0cmluZygiIikgeyAiJTAyeCIuZm9ybWF0KGl0KSB9CiAgICAg
+          ICAgICAgICBhcHBlbmRMb2coIlVudHJ1c3RlZCBjZXJ0aWZpY2F0ZXMgYWxsb3dlZDogcGlubmVkIHRoZSBzZXJ2ZXIgY2VydGlm
+          aWNhdGUgKCR7aGV4LnRha2UoMTIpfS4uLikiKQogICAgICAgICAgICAgcy5jb3B5KHBpbiA9IGhleCkKQEAgLTIzMSw2ICsyNTMs
+          MTMgQEAgb2JqZWN0IFhyYXlDb250cm9sbGVyIHsKICAgICAgICAgfQogICAgIH0KIAorICAgIC8qKiBUcnVlIHdoZW4gdGhlIGNl
+          cnRpZmljYXRlIGxpc3RzIFtob3N0XSAoZXhhY3Qgb3Igb25lLWxldmVsIHdpbGRjYXJkKSBhcyBhIEROUyBuYW1lLCBvciBoYXMg
+          aXQgYXMgQ04gd2hlbiBpdCBsaXN0cyBubyBuYW1lcy4gKi8KKyAgICBwcml2YXRlIGZ1biBjZXJ0TWF0Y2hlcyhjOiBqYXZhLnNl
+          Y3VyaXR5LmNlcnQuWDUwOUNlcnRpZmljYXRlLCBob3N0OiBTdHJpbmcpOiBCb29sZWFuIHsKKyAgICAgICAgdmFsIG5hbWVzID0g
+          dHJ5IHsgYy5zdWJqZWN0QWx0ZXJuYXRpdmVOYW1lcz8uZmlsdGVyIHsgaXRbMF0gPT0gMiB9Py5tYXAgeyBpdFsxXS50b1N0cmlu
+          ZygpIH0gfSBjYXRjaCAoXzogVGhyb3dhYmxlKSB7IG51bGwgfSA/OiBlbXB0eUxpc3QoKQorICAgICAgICB2YWwgbGlzdCA9IG5h
+          bWVzLmlmRW1wdHkgeyBsaXN0T2ZOb3ROdWxsKFJlZ2V4KCJDTj0oW14sXSspIikuZmluZChjLnN1YmplY3RYNTAwUHJpbmNpcGFs
+          Lm5hbWUpPy5ncm91cFZhbHVlcz8uZ2V0KDEpKSB9CisgICAgICAgIHJldHVybiBsaXN0LmFueSB7IG4gLT4gbi5lcXVhbHMoaG9z
+          dCwgdHJ1ZSkgfHwgKG4uc3RhcnRzV2l0aCgiKi4iKSAmJiBob3N0LnN1YnN0cmluZ0FmdGVyKCcuJywgIiIpLmVxdWFscyhuLmRy
+          b3AoMiksIHRydWUpKSB9CisgICAgfQorCiAgICAgcHJpdmF0ZSBmdW4gbGlua2VyKCkgPSBpZiAoUHJvY2Vzcy5pczY0Qml0KCkp
+          ICIvc3lzdGVtL2Jpbi9saW5rZXI2NCIgZWxzZSAiL3N5c3RlbS9iaW4vbGlua2VyIgogCiAgICAgcHJpdmF0ZSBmdW4gcXVvdGUo
+          czogU3RyaW5nKSA9ICInIiArIHMucmVwbGFjZSgiJyIsICInXFwnJyIpICsgIiciCmRpZmYgLS1naXQgYS9tb2JpbGUvc3JjL21h
+          aW4vamF2YS9iZS9teWdvZC92cG5ob3RzcG90L3hyYXkvWHJheUxpbmsua3QgYi9tb2JpbGUvc3JjL21haW4vamF2YS9iZS9teWdv
+          ZC92cG5ob3RzcG90L3hyYXkvWHJheUxpbmsua3QKaW5kZXggMjRjZDc5NS4uYWY0YTgyMSAxMDA2NDQKLS0tIGEvbW9iaWxlL3Ny
+          Yy9tYWluL2phdmEvYmUvbXlnb2QvdnBuaG90c3BvdC94cmF5L1hyYXlMaW5rLmt0CisrKyBiL21vYmlsZS9zcmMvbWFpbi9qYXZh
+          L2JlL215Z29kL3ZwbmhvdHNwb3QveHJheS9YcmF5TGluay5rdApAQCAtMjcsNiArMjcsNyBAQCBkYXRhIGNsYXNzIFhyYXlTZXJ2
+          ZXIoCiAgICAgdmFsIHZtZXNzQ2lwaGVyOiBTdHJpbmcgPSAiYXV0byIsCiAgICAgdmFsIGluc2VjdXJlOiBCb29sZWFuID0gZmFs
+          c2UsIC8vIGFsbG93SW5zZWN1cmU9MSBpbiB0aGUgbGluayAoUm91dGlmeSBwaW5zIHRoZSBzZXJ2ZXIgY2VydGlmaWNhdGUgaW5z
+          dGVhZCkKICAgICB2YWwgcGluOiBTdHJpbmcgPSAiIiwgICAgICAgICAgLy8gcGNzPSBpbiB0aGUgbGluazogU0hBLTI1NiBvZiB0
+          aGUgc2VydmVyIGNlcnRpZmljYXRlCisgICAgdmFsIGhvc3ROYW1lOiBTdHJpbmcgPSAiIiwgICAgIC8vIHRoZSBzZXJ2ZXIncyBv
+          d24gRE5TIG5hbWUgKGtlcHQgd2hlbiBbaG9zdF0gaXMgcmVwbGFjZWQgYnkgaXRzIElQKQogKSB7CiAgICAgLyoqIE9ubHkgeHRs
+          cy1ycHJ4LXZpc2lvbiBpcyBhIHJlYWwgZmxvdywgYW5kIG9ubHkgb3ZlciBwbGFpbiBUQ1AuIExpbmtzIHRoYXQgc2F5IGZsb3c9
+          bm9uZSBtdXN0IG5vdCBzZW5kIGl0IHRvIFhyYXkuICovCiAgICAgcHJpdmF0ZSBmdW4gZmxvd09rKCkgPSBmbG93LnN0YXJ0c1dp
+          dGgoInh0bHMtcnByeC12aXNpb24iKSAmJiBuZXR3b3JrID09ICJ0Y3AiCg==
+          B64_EOF
+          git apply --whitespace=nowarn /tmp/phonevpn.diff
+          git status --short
+          sed -i 's/versionName = ".*"/versionName = "0.3.31"/; s/versionCode = [0-9]*/versionCode = 33100/' mobile/build.gradle.kts
+          grep -n versionName mobile/build.gradle.kts
+
+
+      - name: Commit and push source
+        run: |
+          git add -A
+          git -c user.name="ctmhod" -c user.email="290202009+ctmhod@users.noreply.github.com" commit -q -m "Accept the server certificate automatically when the link sni differs from the server name but the certificate is valid for the server name (v0.3.31)"
+          git pull --rebase origin main || true
+          git push origin HEAD:main
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Build Xray-core (unmodified, MPL 2.0)
+        run: |
+          TAG=v26.11.9
+          git clone --depth 1 --branch $TAG https://github.com/XTLS/Xray-core /tmp/xray
+          cd /tmp/xray
+          for spec in arm64-v8a:arm64: armeabi-v7a:arm:7 x86_64:amd64: x86:386:; do
+            abi=${spec%%:*}; rest=${spec#*:}; arch=${rest%%:*}; arm=${rest#*:}
+            mkdir -p $GITHUB_WORKSPACE/mobile/src/main/jniLibs/$abi
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch GOARM=$arm go build -trimpath -ldflags "-s -w -buildid=" -o /tmp/xray-$abi ./main
+            cp /tmp/xray-$abi $GITHUB_WORKSPACE/mobile/src/main/jniLibs/$abi/libxray.so
+          done
+          cp /tmp/xray-x86_64 $GITHUB_WORKSPACE/xray-x86_64
+          cd $GITHUB_WORKSPACE
+          sed -i 's|^    packaging.resources.excludes += listOf(|    packaging.jniLibs.useLegacyPackaging = true\n    packaging.resources.excludes += listOf(|' mobile/build.gradle.kts
+          grep -n "useLegacyPackaging" mobile/build.gradle.kts
+
+      - name: Build hev-socks5-tunnel (MIT) for all four ABIs
+        run: |
+          mkdir -p /tmp/hevb
+          git clone --recursive https://github.com/heiher/hev-socks5-tunnel /tmp/hevb/jni
+          cd /tmp/hevb/jni && git checkout -q d8a32b2 && git submodule update --init --recursive && cd /tmp/hevb
+          $ANDROID_NDK_HOME/ndk-build NDK_PROJECT_PATH=/tmp/hevb APP_BUILD_SCRIPT=/tmp/hevb/jni/Android.mk NDK_APPLICATION_MK=/tmp/hevb/jni/Application.mk -j4
+          for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+            mkdir -p $GITHUB_WORKSPACE/mobile/src/main/jniLibs/$abi
+            cp /tmp/hevb/libs/$abi/libhev-socks5-tunnel.so $GITHUB_WORKSPACE/mobile/src/main/jniLibs/$abi/
+          done
+          ls -l $GITHUB_WORKSPACE/mobile/src/main/jniLibs/*/
+      - name: Set up release signing
+        env:
+          KS_B64: ${{ secrets.ROUTIFY_KEYSTORE_B64 }}
+        run: |
+          test -n "$KS_B64"
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/routify-release.p12"
+          cat > /tmp/sign.py <<'PY_EOF'
+          p='mobile/build.gradle.kts'
+          t=open(p).read()
+          blk = """    signingConfigs {
+                  create("routify") {
+                      val ksPath = System.getenv("ROUTIFY_KEYSTORE_PATH")
+                      if (ksPath != null) {
+                          storeFile = file(ksPath)
+                          storePassword = System.getenv("ROUTIFY_KEY_PASSWORD")
+                          keyAlias = "routify"
+                          keyPassword = System.getenv("ROUTIFY_KEY_PASSWORD")
+                          enableV1Signing = true
+                          enableV2Signing = true
+                          enableV3Signing = true
+                      }
+                  }
+              }
+          """
+          if 'create("routify")' not in t:
+              t=t.replace("    buildTypes {", blk+"    buildTypes {",1)
+              t=t.replace('signingConfig = signingConfigs.getByName("debug")','signingConfig = if (System.getenv("ROUTIFY_KEYSTORE_PATH") != null) signingConfigs.getByName("routify") else signingConfigs.getByName("debug")')
+          open(p,'w').write(t)
+          PY_EOF
+          python3 /tmp/sign.py
+          grep -n 'routify' mobile/build.gradle.kts | head
+      - name: Build release APKs
+        env:
+          ROUTIFY_KEYSTORE_PATH: ${{ runner.temp }}/routify-release.p12
+          ROUTIFY_KEY_PASSWORD: ${{ secrets.ROUTIFY_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon --stacktrace -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g"
+
+      - name: Collect APKs
+        env:
+          ROUTIFY_KEYSTORE_PATH: ${{ runner.temp }}/routify-release.p12
+          ROUTIFY_KEY_PASSWORD: ${{ secrets.ROUTIFY_KEY_PASSWORD }}
+        run: |
+          mkdir out
+          for f in mobile/build/outputs/apk/release/*.apk; do
+            case "$f" in
+              *universal*) cp "$f" out/Routify-v0.3.31-0-universal.apk ;;
+              *arm64-v8a*) cp "$f" out/Routify-v0.3.31-arm64-v8a.apk ;;
+              *armeabi-v7a*) cp "$f" out/Routify-v0.3.31-armeabi-v7a.apk ;;
+              *x86_64*) cp "$f" out/Routify-v0.3.31-x86_64.apk ;;
+              *x86*) cp "$f" out/Routify-v0.3.31-x86.apk ;;
+            esac
+          done
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+          U=out/Routify-v0.3.31-0-universal.apk
+          zip -q -d $U 'lib/x86/*' 'lib/x86_64/*' 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/MANIFEST.MF'
+          $BT/zipalign -p -f 4 $U /tmp/u-aligned.apk
+          $BT/apksigner sign --ks "$ROUTIFY_KEYSTORE_PATH" --ks-pass env:ROUTIFY_KEY_PASSWORD --key-pass env:ROUTIFY_KEY_PASSWORD --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out $U /tmp/u-aligned.apk
+          $BT/apksigner verify --print-certs $U | head -3
+          for f in out/*.apk; do
+            n=$(unzip -p "$f" 'classes*.dex' | grep -ac 'What Connect covers')
+            echo "$f has new setting string: $n"; test "$n" -ge 1
+            unzip -l "$f" | grep -c 'libhev-socks5-tunnel' || true
+          done
+          ls -l out
+          for n in 0-universal arm64-v8a armeabi-v7a x86 x86_64; do test -f out/Routify-v0.3.31-$n.apk; done
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: apk
+          path: out
+
+      - name: Publish v0.3.31
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          A=$(du -h out/Routify-v0.3.31-arm64-v8a.apk | cut -f1)
+          V=$(du -h out/Routify-v0.3.31-armeabi-v7a.apk | cut -f1)
+          X=$(du -h out/Routify-v0.3.31-x86.apk | cut -f1)
+          Y=$(du -h out/Routify-v0.3.31-x86_64.apk | cut -f1)
+          U=$(du -h out/Routify-v0.3.31-0-universal.apk | cut -f1)
+          cat > notes.md <<NOTES
+          Routify v0.3.31
+
+          Which file to download:
+          - Routify-v0.3.31-0-universal.apk ($U): main option. One file with the ARM types (arm64-v8a and armeabi-v7a). Works on almost every phone and tablet. Not for x86 devices.
+          - Routify-v0.3.31-arm64-v8a.apk ($A): smaller, for most modern phones (64-bit ARM).
+          - Routify-v0.3.31-armeabi-v7a.apk ($V): smaller, for older 32-bit ARM phones.
+          - Routify-v0.3.31-x86_64.apk ($Y): 64-bit x86 devices and emulators.
+          - Routify-v0.3.31-x86.apk ($X): 32-bit x86 devices and emulators.
+          Not sure which one? Use the universal file.
+
+          New in this version:
+          - Links that set sni= and a Host header to a different name than the server (very common) now connect with no setting. If the server shows a certificate that is valid for its own name, Routify accepts exactly that certificate and writes a line about it in the log. If the certificate is not valid for the server name either, strict checking stays on and the existing "Allow untrusted server certificate" setting is still the way to override it.
+          - Links with allowInsecure=1 keep working as before (the exact certificate is pinned).
+          - Includes v0.3.30 (fail-open for hotspot devices, link settings and Xray errors in the log, new "If the server stops working" setting) and everything before it.
+          - Needs Android 10 or newer (not the Galaxy Tab A6, which stops at Android 8.1).
+          - If Android says "App not installed", uninstall the older Routify first (for all users), then install this file.
+
+          Known limits (honest):
+          - Tested on an Android 11 emulator in proxy mode with ws+tls servers (certificate valid for the server name with a different sni, and a certificate valid for neither). The root-mode redirect logic could not run on the emulator (no real root) and is not tested end to end. Not tested on a real hotspot.
+          - The device VPN carries TCP, UDP and DNS. IPv6 and local network addresses are not sent through the VPN.
+          - Xray-core v26.11.9 and hev-socks5-tunnel (MIT) are built from public source in the GitHub build. Credit is in NOTICE.
+          - Signed with the permanent Routify key. Later updates install over this one.
+          NOTES
+          sed -i 's/^ *//' notes.md
+          gh release create v0.3.31 out/Routify-v0.3.31-0-universal.apk out/Routify-v0.3.31-arm64-v8a.apk out/Routify-v0.3.31-armeabi-v7a.apk out/Routify-v0.3.31-x86_64.apk out/Routify-v0.3.31-x86.apk --target main --latest --title "Routify v0.3.31" --notes-file notes.md
+          gh release view v0.3.31 --json assets --jq '.assets[] | [.name, .size] | @tsv'

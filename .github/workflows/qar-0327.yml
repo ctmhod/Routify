@@ -1,0 +1,214 @@
+name: QA of released v0.3.27 APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build local test server binary
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+      - name: Get Xray and the released APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git clone --depth 1 --branch v26.11.9 https://github.com/XTLS/Xray-core /tmp/xray
+          (cd /tmp/xray && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o $GITHUB_WORKSPACE/xray-x86_64 ./main)
+          gh release download v0.3.27 --repo ctmhod/Routify --pattern '*x86_64.apk' --dir /tmp/rel
+          ls -l /tmp/rel; cp /tmp/rel/*x86_64.apk /tmp/test-x86_64.apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Write test script and local test server
+        run: |
+          cat > test.py <<'PY_EOF'
+          import subprocess,re,time,os,json,html,socket
+          os.makedirs('smoke',exist_ok=True)
+          R=[]
+          def sh(c,t=90):
+              p=subprocess.run(c,shell=True,capture_output=True,text=True,timeout=t); return (p.stdout+p.stderr)
+          def adb(c,t=90): return sh('adb '+c,t)
+          def log(s): R.append(s); print(s,flush=True)
+          def shot(n):
+              with open(f'smoke/{n}.png','wb') as f: f.write(subprocess.run('adb exec-out screencap -p',shell=True,capture_output=True).stdout)
+          import xml.etree.ElementTree as ET
+          def nodes():
+              adb('shell uiautomator dump /sdcard/u.xml'); adb('pull /sdcard/u.xml smoke/ui.xml')
+              out=[]
+              for n in ET.parse('smoke/ui.xml').iter('node'):
+                  m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.get('bounds',''))
+                  if m:
+                      a=list(map(int,m.groups())); out.append((n.get('text',''),n.get('content-desc',''),((a[0]+a[2])//2,(a[1]+a[3])//2)))
+              os.remove('smoke/ui.xml'); return out
+          def texts(): return [t for t,d,x in nodes() if t]
+          def tap(l,tries=1):
+              for i in range(tries):
+                  for t,d,xy in nodes():
+                      if t==l or d==l:
+                          adb(f'shell input tap {xy[0]} {xy[1]}'); time.sleep(2.5); return True
+                  time.sleep(2)
+              log('NOT FOUND: '+l); return False
+          SZ=re.search(r'(\d+)x(\d+)',adb('shell wm size')); W,H=int(SZ.group(1)),int(SZ.group(2))
+          def nav(i): adb(f'shell input tap {int(W*(0.125+0.25*i))} {int(H*0.885)}'); time.sleep(3)
+          LINK='vless://11111111-2222-3333-4444-555555555555@10.0.2.2:10443?security=none&type=tcp&flow=none#test'
+          def seed(phone,allow=False):
+              adb('shell am force-stop app.routify'); adb('root'); time.sleep(3)
+              adb('shell mkdir -p /data/data/app.routify/shared_prefs')
+              px='<?xml version="1.0" encoding="utf-8" standalone="yes" ?><map><string name="log_level">info</string><string name="mode">proxy</string><boolean name="phone_vpn" value="%s" /><boolean name="force_allowlist" value="%s" /><int name="selected" value="0" /><string name="links">%s</string></map>'%('true' if phone else 'false','true' if allow else 'false',html.escape(json.dumps([LINK]),quote=False))
+              open('p.xml','w').write(px); adb('push p.xml /data/data/app.routify/shared_prefs/routify_xray.xml'); os.remove('p.xml')
+              uid=adb('shell stat -c %u /data/data/app.routify').strip()
+              adb('shell chown -R '+uid+':'+uid+' /data/data/app.routify/shared_prefs'); adb('shell restorecon -R /data/data/app.routify/shared_prefs')
+              adb('shell rm -rf /data/data/app.routify/app_xray'); adb('unroot'); time.sleep(3); adb('wait-for-device')
+          def start_app():
+              adb('shell monkey -p app.routify -c android.intent.category.LAUNCHER 1'); time.sleep(8); nav(2); time.sleep(2)
+          def srvlog(): return open('server-access.log').read() if os.path.exists('server-access.log') else ''
+          def nc_http(host,port=80,extra=''):
+              return adb(f'shell "printf \'GET / HTTP/1.0\\r\\nHost: {host}\\r\\n\\r\\n\' | toybox nc -w 8 {host} {port} | head -3"',30)
+          def tun(): return adb('shell ip addr show tun0').strip()
+          def stage(name): log('--- '+name)
+
+          adb('logcat -c')
+          # ===== A: device-too mode =====
+          stage('A: mode = device and devices')
+          adb('shell monkey -p app.routify -c android.intent.category.LAUNCHER 1'); time.sleep(6)
+          seed(True); start_app(); shot('01-vpn-tab-before')
+          log('tun0 before Connect: '+repr(tun()[:60]))
+          ip=socket.gethostbyname('example.com')
+          b=nc_http(ip); log('BASELINE direct GET by IP before any VPN: '+b.strip().replace('\n',' | ')[:120])
+          b2=nc_http('example.com'); log('BASELINE direct GET by name before any VPN: '+b2.strip().replace('\n',' | ')[:120])
+          tap('Connect'); time.sleep(4); shot('02-consent-dialog')
+          log('screen after Connect: '+', '.join(texts()[:12]))
+          ok=tap('OK'); time.sleep(8); shot('03-connected')
+          log('screen connected: '+', '.join(texts()[:14]))
+          t=tun(); log('tun0 up: '+str('198.18.0.1' in t)+' | '+t.replace('\n',' ')[:200])
+          log('vpn in connectivity: '+adb('shell dumpsys connectivity | grep -c "VPN"').strip())
+          log('ip rules: '+adb('shell ip rule').replace('\n',' || ')[:1500])
+          ip=socket.gethostbyname('example.com')
+          before=len(srvlog())
+          r1=nc_http('example.com'); log('GET example.com by name via VPN: '+r1.strip().replace('\n',' | ')[:200])
+          r2=nc_http(ip); log('GET by IP via VPN: '+r2.strip().replace('\n',' | ')[:200])
+          time.sleep(2)
+          new=srvlog()[before:]
+          log('server saw domain example.com: '+str('example.com' in new)+'; saw IP '+ip+': '+str(ip in new))
+          log('ping name resolves to mapdns range: '+adb('shell ping -c1 -W2 example.org').strip().split('\n')[0])
+          p=nc_http('example.com',8080) if False else adb('shell "printf \'GET http://example.com/ HTTP/1.0\\r\\n\\r\\n\' | toybox nc -w 8 127.0.0.1 8080 | head -2"',30)
+          log('hotspot HTTP proxy 8080 while VPN on: '+p.strip().replace('\n',' | ')[:200])
+          log('port 1080 listening: '+adb('shell "cat /proc/net/tcp6 /proc/net/tcp | grep -ci :0438"').strip())
+          # root caveat
+          stage('root engine caveat')
+          adb('root'); time.sleep(3); adb('wait-for-device'); adb('push xray-x86_64 /data/local/tmp/xray'); adb('shell chmod 755 /data/local/tmp/xray')
+          cfg={"log":{"loglevel":"warning"},"inbounds":[{"port":1099,"listen":"127.0.0.1","protocol":"socks","settings":{"udp":True}}],"outbounds":[{"protocol":"vless","settings":{"vnext":[{"address":"10.0.2.2","port":10443,"users":[{"id":"11111111-2222-3333-4444-555555555555","encryption":"none"}]}]},"streamSettings":{"network":"tcp","security":"none","sockopt":{"mark":0x1000000}}}]}
+          open('rootcfg.json','w').write(json.dumps(cfg)); adb('push rootcfg.json /data/local/tmp/rootcfg.json')
+          adb('shell "nohup /data/local/tmp/xray run -c /data/local/tmp/rootcfg.json >/data/local/tmp/rx.log 2>&1 &"',20)
+          time.sleep(3)
+          log('root-run marked xray listening: '+adb('shell "cat /proc/net/tcp | grep -ci :044B"').strip()+' ; '+adb('shell id').strip())
+          log('ip rule + route for uid 0 mark: '+adb('shell ip route get 10.0.2.2 uid 0').strip()[:200])
+          log('route get 1.1.1.1 uid 0: '+adb('shell ip route get 1.1.1.1 uid 0').strip()[:200])
+          log('route get 1.1.1.1 uid 0 mark 0x1000000: '+adb('shell ip route get 1.1.1.1 uid 0 mark 0x1000000').strip()[:200])
+          adb('shell pkill -f data/local/tmp/xray'); adb('unroot'); time.sleep(3); adb('wait-for-device')
+          # ===== A2: allow-list mode (root-mode style): root xray must NOT be captured =====
+          stage('A2: allow-list VPN (used when root mode shares)')
+          adb('shell monkey -p app.routify -c android.intent.category.LAUNCHER 1'); time.sleep(3); nav(2); tap('Disconnect'); time.sleep(3)
+          seed(True,True); start_app(); tap('Connect'); time.sleep(4); tap('OK'); time.sleep(8); shot('03b-allowlist-connected')
+          log('allow-list: tun0 up: '+str('198.18.0.1' in tun()))
+          log('allow-list: app log: '+sh("adb logcat -d | grep -i 'root mode, ' | tail -1").strip()[-120:])
+          before=len(srvlog()); r=nc_http('example.com'); time.sleep(2)
+          log('allow-list: shell traffic via VPN (server saw example.com): '+str('example.com' in srvlog()[before:])+' | '+r.strip().replace('\n',' | ')[:100])
+          adb('root'); time.sleep(3); adb('wait-for-device')
+          log('allow-list: ip rules: '+adb('shell ip rule').replace('\n',' || ')[:900])
+          log('allow-list: route get 1.1.1.1 uid 0: '+adb('shell ip route get 1.1.1.1 uid 0').strip()[:160])
+          log('allow-list: route get 1.1.1.1 uid 2000: '+adb('shell ip route get 1.1.1.1 uid 2000').strip()[:160])
+          adb('unroot'); time.sleep(3); adb('wait-for-device')
+          # disconnect
+          stage('Disconnect')
+          adb('shell monkey -p app.routify -c android.intent.category.LAUNCHER 1'); time.sleep(3); nav(2)
+          tap('Disconnect'); time.sleep(5); shot('04-disconnected')
+          log('screen after Disconnect: '+', '.join(texts()[:12]))
+          for _ in range(8):
+              if 'does not exist' in tun(): break
+              time.sleep(1.5)
+          log('tun0 after Disconnect: '+repr(tun()[:60])+' ; '+sh("adb logcat -d -s RoutifyVpn:I | tail -3").strip().replace('\n',' | '))
+          before=len(srvlog())
+          ok3=False
+          for i in range(10):
+              r3=nc_http(ip)
+              if 'HTTP/' in r3: ok3=True; break
+              time.sleep(3)
+          log('direct internet after Disconnect (GET by IP, tried %d times): %s | ping 8.8.8.8: %s'%(i+1,r3.strip().replace('\n',' | ')[:120],adb('shell ping -c1 -W3 8.8.8.8').strip().split('\n')[-1]))
+          r4=nc_http('example.com'); log('direct GET by name after Disconnect: '+r4.strip().replace('\n',' | ')[:120])
+          log('direct DNS after Disconnect: '+adb('shell ping -c1 -W3 example.org').strip().split('\n')[0])
+          log('server log grew after Disconnect: '+str(len(srvlog())>before))
+          log('proxy ports after Disconnect: '+adb('shell "cat /proc/net/tcp6 /proc/net/tcp | grep -ci :1F90"').strip())
+          # ===== B: devices only =====
+          stage('B: mode = devices only (default)')
+          seed(False); start_app(); tap('Connect'); time.sleep(8); shot('05-devices-only-connected')
+          log('screen: '+', '.join(texts()[:12]))
+          log('tun0 in devices-only mode: '+repr(tun()[:60]))
+          log('proxy answers: '+adb('shell "printf \'GET http://example.com/ HTTP/1.0\\r\\n\\r\\n\' | toybox nc -w 8 127.0.0.1 8080 | head -2"',30).strip().replace('\n',' | ')[:200])
+          tap('Disconnect'); time.sleep(3)
+          # ===== C: settings screen =====
+          stage('C: settings option')
+          nav(3); time.sleep(2)
+          for i in range(4):
+              nodes_=texts()
+              if 'What Connect covers' in nodes_: break
+              adb(f'shell input swipe {W//2} {int(H*0.8)} {W//2} {int(H*0.3)} 400'); time.sleep(1)
+          shot('06-settings-row'); log('settings row visible: '+str('What Connect covers' in texts()))
+          if tap('What Connect covers'):
+              shot('07-settings-dialog'); log('dialog: '+', '.join(texts()[:8]))
+          # ===== D: consent denied =====
+          stage('D: consent denied')
+          seed(True); adb('shell appops reset app.routify'); adb('shell cmd appops set app.routify ACTIVATE_VPN default'); start_app(); tap('Connect'); time.sleep(4)
+          tap('Cancel'); time.sleep(4); shot('08-consent-denied')
+          log('screen after Cancel: '+', '.join(texts()[:14]))
+          log('tun0 after denied: '+repr(tun()[:60])+' ; proxy answers: '+adb('shell "printf \'GET http://example.com/ HTTP/1.0\\r\\n\\r\\n\' | toybox nc -w 8 127.0.0.1 8080 | head -1"',30).strip())
+          fatal=sh("adb logcat -d | grep -E 'FATAL EXCEPTION|AndroidRuntime.*app.routify|UnsatisfiedLink' | head -5").strip()
+          log('crash/fatal in logcat: '+(fatal or 'none'))
+          open('smoke/logcat-app.txt','w').write(sh("adb logcat -d | grep -iE 'routify|hev|PhoneVpn' | tail -80"))
+          open('smoke/report.txt','w').write('\n'.join(R))
+
+          PY_EOF
+          cat > server.json <<'JS_EOF'
+          {"log":{"loglevel":"warning","access":"/home/runner/work/server-access.log"},"inbounds":[{"port":10443,"listen":"0.0.0.0","protocol":"vless","settings":{"clients":[{"id":"11111111-2222-3333-4444-555555555555"}],"decryption":"none"}}],"outbounds":[{"protocol":"freedom"}]}
+          JS_EOF
+          sed -i 's|/home/runner/work/server-access.log|'"$PWD"'/server-access.log|' server.json
+          cat > run.sh <<'SH_EOF'
+          set -x
+          ./xray-x86_64 run -c server.json > server.out 2>&1 &
+          sleep 2
+          adb install -r /tmp/test-x86_64.apk 2>&1 | tee smoke/install.txt
+          python3 test.py
+          SH_EOF
+          mkdir -p smoke
+
+      - name: Run on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          disable-animations: true
+          script: bash run.sh
+
+      - name: Upload test output (not committed)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-output
+          path: |
+            smoke
+            server-access.log
+            server.out
+          retention-days: 3

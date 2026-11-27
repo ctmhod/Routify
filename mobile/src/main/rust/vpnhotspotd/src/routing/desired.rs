@@ -45,7 +45,7 @@ impl Runtime {
             RoutingMutation::EnsureIptablesChain {
                 target: IptablesTarget::Ipv4,
                 table: "nat",
-                chain: "vpnhotspot_dns_nat",
+                chain: "routify_dns_nat",
             },
         );
         push_unique(
@@ -53,7 +53,7 @@ impl Runtime {
             RoutingMutation::EnsureIptablesChain {
                 target: IptablesTarget::Ipv4,
                 table: "filter",
-                chain: "vpnhotspot_dns_input",
+                chain: "routify_dns_input",
             },
         );
         for rule in self.dns_rules(config) {
@@ -72,7 +72,7 @@ impl Runtime {
                 ip_protocol: None,
             })),
         );
-        for chain in ["vpnhotspot_acl", "vpnhotspot_stats"] {
+        for chain in ["routify_acl", "routify_stats"] {
             push_unique(
                 &mut mutations,
                 RoutingMutation::EnsureIptablesChain {
@@ -92,7 +92,7 @@ impl Runtime {
                 RoutingMutation::EnsureIptablesChain {
                     target: IptablesTarget::Ipv4,
                     table: "nat",
-                    chain: "vpnhotspot_masquerade",
+                    chain: "routify_masquerade",
                 },
             );
             push_unique(
@@ -165,7 +165,7 @@ impl Runtime {
                 RoutingMutation::EnsureIptablesChain {
                     target: IptablesTarget::Ipv6,
                     table: "filter",
-                    chain: "vpnhotspot_filter",
+                    chain: "routify_filter",
                 },
             );
             for rule in Self::ipv6_block_rules(config) {
@@ -447,7 +447,7 @@ impl Runtime {
             IptablesRule::new(
                 IptablesTarget::Ipv4,
                 "filter",
-                "vpnhotspot_dns_input",
+                "routify_dns_input",
                 vec![
                     "-i".into(),
                     config.downstream.clone(),
@@ -481,7 +481,7 @@ impl Runtime {
         IptablesRule::new(
             IptablesTarget::Ipv4,
             "nat",
-            "vpnhotspot_dns_nat",
+            "routify_dns_nat",
             vec![
                 "-i".into(),
                 config.downstream.clone(),
@@ -508,7 +508,7 @@ impl Runtime {
             IptablesTarget::Ipv4,
             "nat",
             "PREROUTING",
-            vec!["-j".into(), "vpnhotspot_dns_nat".into()],
+            vec!["-j".into(), "routify_dns_nat".into()],
         )
     }
 
@@ -558,13 +558,13 @@ impl Runtime {
             IptablesRule::new(
                 IptablesTarget::Ipv4,
                 "filter",
-                "vpnhotspot_dns_input",
+                "routify_dns_input",
                 allow_args,
             ),
             IptablesRule::new(
                 IptablesTarget::Ipv4,
                 "filter",
-                "vpnhotspot_dns_input",
+                "routify_dns_input",
                 reject_args,
             ),
         ]
@@ -575,7 +575,7 @@ impl Runtime {
             IptablesTarget::Ipv4,
             "filter",
             "INPUT",
-            vec!["-j".into(), "vpnhotspot_dns_input".into()],
+            vec!["-j".into(), "routify_dns_input".into()],
         )
     }
 
@@ -585,12 +585,12 @@ impl Runtime {
                 IptablesTarget::Ipv4,
                 "filter",
                 "FORWARD",
-                vec!["-j".into(), "vpnhotspot_acl".into()],
+                vec!["-j".into(), "routify_acl".into()],
             ),
             IptablesRule::new(
                 IptablesTarget::Ipv4,
                 "filter",
-                "vpnhotspot_acl",
+                "routify_acl",
                 // Ensure blocking works before client-specific allow rules are added.
                 vec![
                     "-i".into(),
@@ -605,7 +605,7 @@ impl Runtime {
             IptablesRule::new(
                 IptablesTarget::Ipv4,
                 "filter",
-                "vpnhotspot_acl",
+                "routify_acl",
                 vec![
                     "-o".into(),
                     config.downstream.clone(),
@@ -620,7 +620,7 @@ impl Runtime {
             IptablesRule::new(
                 IptablesTarget::Ipv4,
                 "filter",
-                "vpnhotspot_acl",
+                "routify_acl",
                 vec![
                     "-o".into(),
                     config.downstream.clone(),
@@ -629,7 +629,7 @@ impl Runtime {
                     "--state".into(),
                     "ESTABLISHED,RELATED".into(),
                     "-j".into(),
-                    "vpnhotspot_stats".into(),
+                    "routify_stats".into(),
                 ],
             ),
         ]
@@ -640,7 +640,7 @@ impl Runtime {
             IptablesTarget::Ipv4,
             "nat",
             "POSTROUTING",
-            vec!["-j".into(), "vpnhotspot_masquerade".into()],
+            vec!["-j".into(), "routify_masquerade".into()],
         )
     }
 
@@ -649,7 +649,7 @@ impl Runtime {
         IptablesRule::new(
             IptablesTarget::Ipv4,
             "nat",
-            "vpnhotspot_masquerade",
+            "routify_masquerade",
             vec![
                 "-s".into(),
                 host_subnet(self.downstream_ipv4),
@@ -672,7 +672,7 @@ impl Runtime {
         rules.push(IptablesRule::new(
             IptablesTarget::Ipv4,
             "filter",
-            "vpnhotspot_acl",
+            "routify_acl",
             vec![
                 "-i".into(),
                 config.downstream.clone(),
@@ -683,7 +683,7 @@ impl Runtime {
                 "-s".into(),
                 address_string,
                 "-j".into(),
-                "vpnhotspot_stats".into(),
+                "routify_stats".into(),
             ],
         ));
         rules.extend(Self::client_ip_stats_rules(config, mac, address));
@@ -701,7 +701,7 @@ impl Runtime {
             IptablesRule::new(
                 IptablesTarget::Ipv4,
                 "filter",
-                "vpnhotspot_stats",
+                "routify_stats",
                 vec![
                     "-i".into(),
                     config.downstream.clone(),
@@ -718,7 +718,7 @@ impl Runtime {
             IptablesRule::new(
                 IptablesTarget::Ipv4,
                 "filter",
-                "vpnhotspot_stats",
+                "routify_stats",
                 vec![
                     "-o".into(),
                     config.downstream.clone(),
@@ -735,7 +735,7 @@ impl Runtime {
         IptablesRule::new(
             IptablesTarget::Ipv6,
             "mangle",
-            "vpnhotspot_acl",
+            "routify_acl",
             vec![
                 "-m".into(),
                 "mac".into(),
@@ -752,7 +752,7 @@ impl Runtime {
         rules.push(IptablesRule::new(
             IptablesTarget::Ipv6,
             "filter",
-            "vpnhotspot_filter",
+            "routify_filter",
             vec![
                 "-i".into(),
                 config.downstream.clone(),
@@ -763,7 +763,7 @@ impl Runtime {
         rules.push(IptablesRule::new(
             IptablesTarget::Ipv6,
             "filter",
-            "vpnhotspot_filter",
+            "routify_filter",
             vec![
                 "-o".into(),
                 config.downstream.clone(),
@@ -782,7 +782,7 @@ impl Runtime {
                     IptablesTarget::Ipv6,
                     "filter",
                     chain,
-                    vec!["-j".into(), "vpnhotspot_filter".into()],
+                    vec!["-j".into(), "routify_filter".into()],
                 )
             })
             .collect()

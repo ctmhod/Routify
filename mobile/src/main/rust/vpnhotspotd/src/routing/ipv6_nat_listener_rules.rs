@@ -76,7 +76,7 @@ impl Ipv6NatFirewall {
         IptablesRule::new(
             IptablesTarget::Ipv6,
             "mangle",
-            "vpnhotspot_v6_protocols",
+            "routify_v6_protocols",
             args,
         )
     }
@@ -91,7 +91,7 @@ impl Ipv6NatFirewall {
                 IptablesRule::new(
                     IptablesTarget::Ipv6,
                     "mangle",
-                    "vpnhotspot_v6_tproxy",
+                    "routify_v6_tproxy",
                     vec![
                         "-i".into(),
                         config.downstream.clone(),
@@ -122,20 +122,20 @@ impl Ipv6NatFirewall {
             "-j".to_owned(),
         ];
         let mut protocol_args = base_args.to_vec();
-        protocol_args.push("vpnhotspot_v6_protocols".to_owned());
+        protocol_args.push("routify_v6_protocols".to_owned());
         let mut acl_args = base_args.to_vec();
-        acl_args.push("vpnhotspot_v6_acl_gate".to_owned());
+        acl_args.push("routify_v6_acl_gate".to_owned());
         [
             IptablesRule::new(
                 IptablesTarget::Ipv6,
                 "mangle",
-                "vpnhotspot_v6_tproxy",
+                "routify_v6_tproxy",
                 protocol_args,
             ),
             IptablesRule::new(
                 IptablesTarget::Ipv6,
                 "mangle",
-                "vpnhotspot_v6_tproxy",
+                "routify_v6_tproxy",
                 acl_args,
             ),
         ]

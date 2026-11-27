@@ -88,9 +88,9 @@ class WifiDoubleLock(lockType: Int) : AutoCloseable {
         override fun onDestroy(owner: LifecycleOwner) = app.pref.unregisterOnSharedPreferenceChangeListener(this)
     }
 
-    private val wifi = Services.wifi.createWifiLock(lockType, "vpnhotspot:wifi").apply { acquire() }
+    private val wifi = Services.wifi.createWifiLock(lockType, "routify:wifi").apply { acquire() }
     @SuppressLint("WakelockTimeout")
-    private val power = service.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "vpnhotspot:power").apply { acquire() }
+    private val power = service.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "routify:power").apply { acquire() }
 
     override fun close() {
         if (wifi.isHeld) wifi.release()

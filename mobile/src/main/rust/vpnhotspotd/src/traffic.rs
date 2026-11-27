@@ -17,7 +17,7 @@ pub(crate) async fn read_counters(
     firewall::restore_stdout_lines(
         IptablesTarget::Ipv4,
         "*filter
--nvx -L vpnhotspot_stats
+-nvx -L routify_stats
 COMMIT
 ",
         |line| {

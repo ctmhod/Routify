@@ -22,56 +22,56 @@ pub(super) async fn clean() {
         IptablesTarget::Ipv4,
         "mangle",
         "PREROUTING",
-        &["-j", "vpnhotspot_dns_tproxy"],
+        &["-j", "routify_dns_tproxy"],
     )
     .await;
     delete_iptables_repeated(
         IptablesTarget::Ipv4,
         "filter",
         "INPUT",
-        &["-j", "vpnhotspot_dns_input"],
+        &["-j", "routify_dns_input"],
     )
     .await;
     delete_iptables_repeated(
         IptablesTarget::Ipv4,
         "filter",
         "FORWARD",
-        &["-j", "vpnhotspot_acl"],
+        &["-j", "routify_acl"],
     )
     .await;
     delete_iptables_repeated(
         IptablesTarget::Ipv4,
         "nat",
         "PREROUTING",
-        &["-j", "vpnhotspot_dns_nat"],
+        &["-j", "routify_dns_nat"],
     )
     .await;
     delete_iptables_repeated(
         IptablesTarget::Ipv4,
         "nat",
         "POSTROUTING",
-        &["-j", "vpnhotspot_masquerade"],
+        &["-j", "routify_masquerade"],
     )
     .await;
     if let Err(e) = firewall::restore(
         IptablesTarget::Ipv4,
         "*mangle
-:vpnhotspot_dns_tproxy - [0:0]
--X vpnhotspot_dns_tproxy
+:routify_dns_tproxy - [0:0]
+-X routify_dns_tproxy
 COMMIT
 *filter
-:vpnhotspot_dns_input - [0:0]
-:vpnhotspot_acl - [0:0]
-:vpnhotspot_stats - [0:0]
--X vpnhotspot_dns_input
--X vpnhotspot_acl
--X vpnhotspot_stats
+:routify_dns_input - [0:0]
+:routify_acl - [0:0]
+:routify_stats - [0:0]
+-X routify_dns_input
+-X routify_acl
+-X routify_stats
 COMMIT
 *nat
-:vpnhotspot_dns_nat - [0:0]
-:vpnhotspot_masquerade - [0:0]
--X vpnhotspot_dns_nat
--X vpnhotspot_masquerade
+:routify_dns_nat - [0:0]
+:routify_masquerade - [0:0]
+-X routify_dns_nat
+-X routify_masquerade
 COMMIT
 ",
     )

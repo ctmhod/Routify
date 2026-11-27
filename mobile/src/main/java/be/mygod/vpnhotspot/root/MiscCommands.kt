@@ -67,14 +67,14 @@ data class Dump(val path: String) : RootCommandNoResult {
                     |echo iptables -t nat -nvx -L POSTROUTING
                     |$IPTABLES -w -t nat -nvx -L POSTROUTING
                     |echo
-                    |echo iptables -t nat -nvx -L vpnhotspot_masquerade
-                    |$IPTABLES -w -t nat -nvx -L vpnhotspot_masquerade
+                    |echo iptables -t nat -nvx -L routify_masquerade
+                    |$IPTABLES -w -t nat -nvx -L routify_masquerade
                     |echo
-                    |echo iptables -nvx -L vpnhotspot_acl
-                    |$IPTABLES -w -nvx -L vpnhotspot_acl
+                    |echo iptables -nvx -L routify_acl
+                    |$IPTABLES -w -nvx -L routify_acl
                     |echo
-                    |echo iptables -nvx -L vpnhotspot_stats
-                    |$IPTABLES -w -nvx -L vpnhotspot_stats
+                    |echo iptables -nvx -L routify_stats
+                    |$IPTABLES -w -nvx -L routify_stats
                     |echo
                     |echo logcat-su
                     |$LOGCAT -d

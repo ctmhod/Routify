@@ -13,26 +13,26 @@ pub(super) struct Ipv6NatFirewall;
 
 impl Ipv6NatFirewall {
     const BLOCK_FILTER_CHAIN: IptablesChain =
-        IptablesChain::new(IptablesTarget::Ipv6, "filter", "vpnhotspot_filter");
+        IptablesChain::new(IptablesTarget::Ipv6, "filter", "routify_filter");
     const NAT_FILTER_JUMPS: [(&'static str, IptablesChain); 3] = [
         (
             "INPUT",
-            IptablesChain::new(IptablesTarget::Ipv6, "filter", "vpnhotspot_v6_input"),
+            IptablesChain::new(IptablesTarget::Ipv6, "filter", "routify_v6_input"),
         ),
         (
             "FORWARD",
-            IptablesChain::new(IptablesTarget::Ipv6, "filter", "vpnhotspot_v6_forward"),
+            IptablesChain::new(IptablesTarget::Ipv6, "filter", "routify_v6_forward"),
         ),
         (
             "OUTPUT",
-            IptablesChain::new(IptablesTarget::Ipv6, "filter", "vpnhotspot_v6_output"),
+            IptablesChain::new(IptablesTarget::Ipv6, "filter", "routify_v6_output"),
         ),
     ];
     pub(super) const NAT_MANGLE_CHAINS: [IptablesChain; 4] = [
-        IptablesChain::new(IptablesTarget::Ipv6, "mangle", "vpnhotspot_acl"),
-        IptablesChain::new(IptablesTarget::Ipv6, "mangle", "vpnhotspot_v6_acl_gate"),
-        IptablesChain::new(IptablesTarget::Ipv6, "mangle", "vpnhotspot_v6_protocols"),
-        IptablesChain::new(IptablesTarget::Ipv6, "mangle", "vpnhotspot_v6_tproxy"),
+        IptablesChain::new(IptablesTarget::Ipv6, "mangle", "routify_acl"),
+        IptablesChain::new(IptablesTarget::Ipv6, "mangle", "routify_v6_acl_gate"),
+        IptablesChain::new(IptablesTarget::Ipv6, "mangle", "routify_v6_protocols"),
+        IptablesChain::new(IptablesTarget::Ipv6, "mangle", "routify_v6_tproxy"),
     ];
 
     pub(super) fn append_session_mutations(
@@ -99,7 +99,7 @@ impl Ipv6NatFirewall {
             IptablesRule::new(
                 IptablesTarget::Ipv6,
                 "filter",
-                "vpnhotspot_v6_forward",
+                "routify_v6_forward",
                 vec![
                     "-o".into(),
                     config.downstream.clone(),
@@ -110,7 +110,7 @@ impl Ipv6NatFirewall {
             IptablesRule::new(
                 IptablesTarget::Ipv6,
                 "filter",
-                "vpnhotspot_v6_forward",
+                "routify_v6_forward",
                 vec![
                     "-i".into(),
                     config.downstream.clone(),
@@ -121,7 +121,7 @@ impl Ipv6NatFirewall {
             IptablesRule::new(
                 IptablesTarget::Ipv6,
                 "filter",
-                "vpnhotspot_v6_output",
+                "routify_v6_output",
                 vec![
                     "-o".into(),
                     config.downstream.clone(),
@@ -136,7 +136,7 @@ impl Ipv6NatFirewall {
             IptablesRule::new(
                 IptablesTarget::Ipv6,
                 "filter",
-                "vpnhotspot_v6_output",
+                "routify_v6_output",
                 vec![
                     "-o".into(),
                     config.downstream.clone(),
@@ -161,7 +161,7 @@ impl Ipv6NatFirewall {
             IptablesRule::new(
                 IptablesTarget::Ipv6,
                 "filter",
-                "vpnhotspot_v6_input",
+                "routify_v6_input",
                 vec![
                     "-i".into(),
                     config.downstream.clone(),
@@ -172,7 +172,7 @@ impl Ipv6NatFirewall {
             IptablesRule::new(
                 IptablesTarget::Ipv6,
                 "filter",
-                "vpnhotspot_v6_input",
+                "routify_v6_input",
                 vec![
                     "-i".into(),
                     config.downstream.clone(),
@@ -186,7 +186,7 @@ impl Ipv6NatFirewall {
             IptablesRule::new(
                 IptablesTarget::Ipv6,
                 "filter",
-                "vpnhotspot_v6_input",
+                "routify_v6_input",
                 vec![
                     "-i".into(),
                     config.downstream.clone(),
@@ -211,7 +211,7 @@ impl Ipv6NatFirewall {
         IptablesRule::new(
             IptablesTarget::Ipv6,
             "mangle",
-            "vpnhotspot_acl",
+            "routify_acl",
             vec!["-j".into(), "DROP".into()],
         )
     }
@@ -220,7 +220,7 @@ impl Ipv6NatFirewall {
         IptablesRule::new(
             IptablesTarget::Ipv6,
             "mangle",
-            "vpnhotspot_v6_protocols",
+            "routify_v6_protocols",
             icmp_echo_rule_args(
                 config.downstream.clone(),
                 ipv6_nat.gateway.address(),
@@ -233,12 +233,12 @@ impl Ipv6NatFirewall {
         IptablesRule::new(
             IptablesTarget::Ipv6,
             "mangle",
-            "vpnhotspot_v6_acl_gate",
+            "routify_v6_acl_gate",
             vec![
                 "-i".into(),
                 config.downstream.clone(),
                 "-j".into(),
-                "vpnhotspot_acl".into(),
+                "routify_acl".into(),
             ],
         )
     }
@@ -247,8 +247,8 @@ impl Ipv6NatFirewall {
         IptablesRule::new(
             IptablesTarget::Ipv6,
             "mangle",
-            "vpnhotspot_v6_tproxy",
-            vec!["-j".into(), "vpnhotspot_v6_acl_gate".into()],
+            "routify_v6_tproxy",
+            vec!["-j".into(), "routify_v6_acl_gate".into()],
         )
     }
 
@@ -256,8 +256,8 @@ impl Ipv6NatFirewall {
         IptablesRule::new(
             IptablesTarget::Ipv6,
             "mangle",
-            "vpnhotspot_v6_tproxy",
-            vec!["-j".into(), "vpnhotspot_v6_protocols".into()],
+            "routify_v6_tproxy",
+            vec!["-j".into(), "routify_v6_protocols".into()],
         )
     }
 
@@ -268,7 +268,7 @@ impl Ipv6NatFirewall {
                 IptablesRule::new(
                     IptablesTarget::Ipv6,
                     "mangle",
-                    "vpnhotspot_v6_tproxy",
+                    "routify_v6_tproxy",
                     vec![
                         "-i".into(),
                         config.downstream.clone(),
@@ -303,7 +303,7 @@ impl Ipv6NatFirewall {
             IptablesTarget::Ipv6,
             "filter",
             "INPUT",
-            vec!["-j".into(), "vpnhotspot_v6_input".into()],
+            vec!["-j".into(), "routify_v6_input".into()],
         )
     }
 
@@ -312,7 +312,7 @@ impl Ipv6NatFirewall {
             IptablesTarget::Ipv6,
             "mangle",
             "PREROUTING",
-            vec!["-j".into(), "vpnhotspot_v6_tproxy".into()],
+            vec!["-j".into(), "routify_v6_tproxy".into()],
         )
     }
 

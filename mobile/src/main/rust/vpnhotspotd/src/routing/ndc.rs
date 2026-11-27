@@ -8,7 +8,7 @@ use vpnhotspotd::shared::protocol::IoResultReportExt;
 pub(super) async fn add_ip_forward(downstream: &str) -> io::Result<()> {
     if let Err(e) = run_ndc(
         "ipfwd",
-        &["ipfwd", "enable", &format!("vpnhotspot_{downstream}")],
+        &["ipfwd", "enable", &format!("routify_{downstream}")],
     )
     .await
     {
@@ -21,7 +21,7 @@ pub(super) async fn add_ip_forward(downstream: &str) -> io::Result<()> {
 pub(super) async fn remove_ip_forward(downstream: &str) -> bool {
     if let Err(e) = run_ndc(
         "ipfwd",
-        &["ipfwd", "disable", &format!("vpnhotspot_{downstream}")],
+        &["ipfwd", "disable", &format!("routify_{downstream}")],
     )
     .await
     {

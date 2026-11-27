@@ -1,0 +1,581 @@
+name: QA v0.3.26 build and emulator test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager "platforms;android-37.0" "build-tools;37.0.0" "ndk;29.0.14206865"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
+
+      - name: Install Android Rust targets
+        run: rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Apply the phone VPN change
+        run: |
+          base64 -d > /tmp/phonevpn.diff <<'B64_EOF'
+          ZGlmZiAtLWdpdCBhL1JFQURNRS5tZCBiL1JFQURNRS5tZAppbmRleCAyY2FhZjVkLi41NmM1ZDJmIDEwMDY0NAotLS0gYS9SRUFE
+          TUUubWQKKysrIGIvUkVBRE1FLm1kCkBAIC0xNyw4ICsxNywxMCBAQCBUaGUgYXBwIGhhcyBmb3VyIHRhYnM6CiAKIC0gKipSb290
+          IG1vZGUqKjogYWxsIFRDUCBhbmQgRE5TIHRyYWZmaWMgZnJvbSBob3RzcG90IGRldmljZXMgaXMgcmVkaXJlY3RlZCB0aHJvdWdo
+          IHRoZSBzZXJ2ZXIuIFVEUCBpcyBwcm94aWVkIHRvbyB3aGVuIHRoZSBwaG9uZSdzIGtlcm5lbCBzdXBwb3J0cyBUUFJPWFkuCiAt
+          ICoqUHJveHkgbW9kZSAobm8gcm9vdCkqKjogUm91dGlmeSBvcGVucyBhIGxvY2FsIHByb3h5IChIVFRQIG9uIHBvcnQgODA4MCwg
+          U09DS1Mgb24gcG9ydCAxMDgwKS4gRGV2aWNlcyBvbiB5b3VyIGhvdHNwb3Qgc2V0IGl0IGFzIHRoZSBwcm94eSBpbiB0aGVpciBX
+          aS1GaSBzZXR0aW5ncy4gT25seSBhcHBzIHRoYXQgZm9sbG93IHRoZSBXaS1GaSBwcm94eSBhcmUgY292ZXJlZC4KKy0gVGhlIHBy
+          b3h5IGhhcyBubyB1c2VybmFtZSBvciBwYXNzd29yZCBvbiBwdXJwb3NlOiBhbnlvbmUgd2hvIGNhbiByZWFjaCB5b3VyIGhvdHNw
+          b3QgbmV0d29yayBjYW4gdXNlIGl0LgogLSAqKkF1dG8qKiAoZGVmYXVsdCkgdXNlcyByb290IG1vZGUgd2hlbiByb290IHdvcmtz
+          IGFuZCBwcm94eSBtb2RlIG90aGVyd2lzZS4KLS0gV2hpbGUgdGhlIHByb3h5IGlzIG9uLCBhIG5vdGlmaWNhdGlvbiBrZWVwcyBS
+          b3V0aWZ5IHJ1bm5pbmcgaW4gdGhlIGJhY2tncm91bmQuCistICoqU2V0dGluZ3MgPiBXaGF0IENvbm5lY3QgY292ZXJzKio6ICJP
+          dGhlciBkZXZpY2VzIG9ubHkiIChkZWZhdWx0KSBvciAiVGhpcyBkZXZpY2UgYW5kIG90aGVyIGRldmljZXMiLiBUaGUgc2Vjb25k
+          IG9wdGlvbiBhbHNvIHB1dHMgdGhpcyBwaG9uZSBvciB0YWJsZXQgb24gdGhlIFZQTiwgbGlrZSBhIG5vcm1hbCBWUE4gYXBwLiBB
+          bmRyb2lkIGFza3MgZm9yIHBlcm1pc3Npb24gdGhlIGZpcnN0IHRpbWUuIFJvdXRpZnkgaXRzZWxmIGlzIGxlZnQgb3V0IG9mIHRo
+          ZSBWUE4gc28gdGhlcmUgaXMgbm8gbG9vcC4KKy0gV2hpbGUgdGhlIFZQTiBpcyBvbiwgYSBub3RpZmljYXRpb24ga2VlcHMgUm91
+          dGlmeSBydW5uaW5nIGluIHRoZSBiYWNrZ3JvdW5kLgogCiAjIyMgVW50cnVzdGVkIHNlcnZlciBjZXJ0aWZpY2F0ZQogCmRpZmYg
+          LS1naXQgYS9tb2JpbGUvcHJvZ3VhcmQtcnVsZXMucHJvIGIvbW9iaWxlL3Byb2d1YXJkLXJ1bGVzLnBybwppbmRleCAyZDUxYjBl
+          Li40YzJmZjk1IDEwMDY0NAotLS0gYS9tb2JpbGUvcHJvZ3VhcmQtcnVsZXMucHJvCisrKyBiL21vYmlsZS9wcm9ndWFyZC1ydWxl
+          cy5wcm8KQEAgLTI1LDMgKzI1LDUgQEAKICMgSWYgeW91IGtlZXAgdGhlIGxpbmUgbnVtYmVyIGluZm9ybWF0aW9uLCB1bmNvbW1l
+          bnQgdGhpcyB0bwogIyBoaWRlIHRoZSBvcmlnaW5hbCBzb3VyY2UgZmlsZSBuYW1lLgogIy1yZW5hbWVzb3VyY2VmaWxlYXR0cmli
+          dXRlIFNvdXJjZUZpbGUKKworLWtlZXAgY2xhc3MgaGV2Lmh0cHJveHkuKiogeyAqOyB9CmRpZmYgLS1naXQgYS9tb2JpbGUvc3Jj
+          L21haW4vQW5kcm9pZE1hbmlmZXN0LnhtbCBiL21vYmlsZS9zcmMvbWFpbi9BbmRyb2lkTWFuaWZlc3QueG1sCmluZGV4IDhjNGZm
+          OWIuLjZmY2RlMGQgMTAwNjQ0Ci0tLSBhL21vYmlsZS9zcmMvbWFpbi9BbmRyb2lkTWFuaWZlc3QueG1sCisrKyBiL21vYmlsZS9z
+          cmMvbWFpbi9BbmRyb2lkTWFuaWZlc3QueG1sCkBAIC0xMTMsNiArMTEzLDE0IEBACiAgICAgICAgICAgICAgICAgYW5kcm9pZDpu
+          YW1lPSJhbmRyb2lkLmFwcC5QUk9QRVJUWV9TUEVDSUFMX1VTRV9GR1NfU1VCVFlQRSIKICAgICAgICAgICAgICAgICBhbmRyb2lk
+          OnZhbHVlPSJLZWVwIHRoZSBsb2NhbCBwcm94eSBydW5uaW5nIHdoaWxlIFJvdXRpZnkgaXMgaW4gdGhlIGJhY2tncm91bmQiIC8+
+          CiAgICAgICAgIDwvc2VydmljZT4KKyAgICAgICAgPHNlcnZpY2UKKyAgICAgICAgICAgIGFuZHJvaWQ6bmFtZT0iLnhyYXkuUGhv
+          bmVWcG5TZXJ2aWNlIgorICAgICAgICAgICAgYW5kcm9pZDpleHBvcnRlZD0iZmFsc2UiCisgICAgICAgICAgICBhbmRyb2lkOnBl
+          cm1pc3Npb249ImFuZHJvaWQucGVybWlzc2lvbi5CSU5EX1ZQTl9TRVJWSUNFIj4KKyAgICAgICAgICAgIDxpbnRlbnQtZmlsdGVy
+          PgorICAgICAgICAgICAgICAgIDxhY3Rpb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLm5ldC5WcG5TZXJ2aWNlIi8+CisgICAgICAg
+          ICAgICA8L2ludGVudC1maWx0ZXI+CisgICAgICAgIDwvc2VydmljZT4KICAgICAgICAgPHNlcnZpY2UKICAgICAgICAgICAgIGFu
+          ZHJvaWQ6bmFtZT0iLlRldGhlcmluZ1NlcnZpY2UiCiAgICAgICAgICAgICBhbmRyb2lkOmRpcmVjdEJvb3RBd2FyZT0idHJ1ZSIK
+          ZGlmZiAtLWdpdCBhL21vYmlsZS9zcmMvbWFpbi9qYXZhL2JlL215Z29kL3ZwbmhvdHNwb3QvdWkvU2V0dGluZ3NTY3JlZW4ua3Qg
+          Yi9tb2JpbGUvc3JjL21haW4vamF2YS9iZS9teWdvZC92cG5ob3RzcG90L3VpL1NldHRpbmdzU2NyZWVuLmt0CmluZGV4IDhhNmUw
+          NjkuLmFmMDdhMDkgMTAwNjQ0Ci0tLSBhL21vYmlsZS9zcmMvbWFpbi9qYXZhL2JlL215Z29kL3ZwbmhvdHNwb3QvdWkvU2V0dGlu
+          Z3NTY3JlZW4ua3QKKysrIGIvbW9iaWxlL3NyYy9tYWluL2phdmEvYmUvbXlnb2QvdnBuaG90c3BvdC91aS9TZXR0aW5nc1NjcmVl
+          bi5rdApAQCAtMzUwLDYgKzM1MCw3IEBAIGZ1biBTZXR0aW5nc1NjcmVlbihzbmFja2Jhckhvc3RTdGF0ZTogU25hY2tiYXJIb3N0
+          U3RhdGUpIHsKICAgICAgICAgICAgIHJvdygicm91dGlmeV9saW1pdHNfZGVmYXVsdHMiKSB7CiAgICAgICAgICAgICAgICAgRGVm
+          YXVsdExpbWl0c1JvdygpCiAgICAgICAgICAgICB9CisgICAgICAgICAgICByb3coInJvdXRpZnlfdnBuX2NvdmVyIikgeyBWcG5D
+          b3ZlcmFnZVJvdygpIH0KICAgICAgICAgICAgIHJvdygicm91dGlmeV92cG5fZG5zIikgeyBWcG5EbnNSb3coKSB9CiAgICAgICAg
+          ICAgICByb3coInJvdXRpZnlfdnBuX2xvZyIpIHsgVnBuTG9nUm93KCkgfQogICAgICAgICAgICAgcm93KCJyb3V0aWZ5X3RoZW1l
+          IikgeyBUaGVtZVJvdygpIH0KZGlmZiAtLWdpdCBhL21vYmlsZS9zcmMvbWFpbi9qYXZhL2JlL215Z29kL3ZwbmhvdHNwb3QvdWkv
+          VnBuU2NyZWVuLmt0IGIvbW9iaWxlL3NyYy9tYWluL2phdmEvYmUvbXlnb2QvdnBuaG90c3BvdC91aS9WcG5TY3JlZW4ua3QKaW5k
+          ZXggMjkxOTY3Yi4uOWE4NjhmZiAxMDA2NDQKLS0tIGEvbW9iaWxlL3NyYy9tYWluL2phdmEvYmUvbXlnb2QvdnBuaG90c3BvdC91
+          aS9WcG5TY3JlZW4ua3QKKysrIGIvbW9iaWxlL3NyYy9tYWluL2phdmEvYmUvbXlnb2QvdnBuaG90c3BvdC91aS9WcG5TY3JlZW4u
+          a3QKQEAgLTEyLDYgKzEyLDEwIEBAIGltcG9ydCBhbmRyb2lkeC5jb21wb3NlLnVpLkFsaWdubWVudAogaW1wb3J0IGFuZHJvaWR4
+          LmNvbXBvc2UudWkuTW9kaWZpZXIKIGltcG9ydCBhbmRyb2lkeC5jb21wb3NlLnVpLnBsYXRmb3JtLkxvY2FsQ29udGV4dAogaW1w
+          b3J0IGFuZHJvaWR4LmNvbXBvc2UudWkudW5pdC5kcAoraW1wb3J0IGFuZHJvaWQuYXBwLkFjdGl2aXR5CitpbXBvcnQgYW5kcm9p
+          ZHguYWN0aXZpdHkuY29tcG9zZS5yZW1lbWJlckxhdW5jaGVyRm9yQWN0aXZpdHlSZXN1bHQKK2ltcG9ydCBhbmRyb2lkeC5hY3Rp
+          dml0eS5yZXN1bHQuY29udHJhY3QuQWN0aXZpdHlSZXN1bHRDb250cmFjdHMKK2ltcG9ydCBiZS5teWdvZC52cG5ob3RzcG90Lnhy
+          YXkuUGhvbmVWcG4KIGltcG9ydCBiZS5teWdvZC52cG5ob3RzcG90LnhyYXkuWHJheUNvbnRyb2xsZXIKIGltcG9ydCBiZS5teWdv
+          ZC52cG5ob3RzcG90LnhyYXkuWHJheVNlcnZlcgogaW1wb3J0IGtvdGxpbnguY29yb3V0aW5lcy5sYXVuY2gKQEAgLTI3LDYgKzMx
+          LDE0IEBAIGZ1biBWcG5TY3JlZW4oaG90c3BvdElmYWNlczogQ29sbGVjdGlvbjxTdHJpbmc+KSB7CiAgICAgdmFyIHNlbGVjdGVk
+          IGJ5IHJlbWVtYmVyIHsgbXV0YWJsZUludFN0YXRlT2YoWHJheUNvbnRyb2xsZXIuc2VsZWN0ZWQpIH0KICAgICB2YWwgcnVubmlu
+          ZyBieSBYcmF5Q29udHJvbGxlci5ydW5uaW5nLmNvbGxlY3RBc1N0YXRlKCkKICAgICB2YWwgc3RhdHVzIGJ5IFhyYXlDb250cm9s
+          bGVyLm1lc3NhZ2UuY29sbGVjdEFzU3RhdGUoKQorICAgIHZhbCBwaG9uZVN0YXR1cyBieSBQaG9uZVZwbi5zdGF0dXMuY29sbGVj
+          dEFzU3RhdGUoKQorICAgIHZhciBwZW5kaW5nUG9ydCBieSByZW1lbWJlciB7IG11dGFibGVJbnRTdGF0ZU9mKFhyYXlDb250cm9s
+          bGVyLlNPQ0tTX1BPUlQpIH0KKyAgICB2YWwgdnBuQ29uc2VudCA9IHJlbWVtYmVyTGF1bmNoZXJGb3JBY3Rpdml0eVJlc3VsdChB
+          Y3Rpdml0eVJlc3VsdENvbnRyYWN0cy5TdGFydEFjdGl2aXR5Rm9yUmVzdWx0KCkpIHsgciAtPgorICAgICAgICBpZiAoci5yZXN1
+          bHRDb2RlID09IEFjdGl2aXR5LlJFU1VMVF9PSykgUGhvbmVWcG4uYmVnaW4ocGVuZGluZ1BvcnQpIGVsc2UgeworICAgICAgICAg
+          ICAgWHJheUNvbnRyb2xsZXIuc3RvcFBob25lRW5naW5lKCkKKyAgICAgICAgICAgIFBob25lVnBuLnNldFN0YXR1cygiVGhpcyBk
+          ZXZpY2UgaXMgbm90IG9uIHRoZSBWUE4gKHBlcm1pc3Npb24gbm90IGdpdmVuKS4gU2hhcmluZyBzdGlsbCB3b3Jrcy4iKQorICAg
+          ICAgICB9CisgICAgfQogICAgIHZhciBsb2dUZXh0IGJ5IHJlbWVtYmVyIHsgbXV0YWJsZVN0YXRlT2YoWHJheUNvbnRyb2xsZXIu
+          Y3Jhc2hMb2coKSArIFhyYXlDb250cm9sbGVyLnJlYWRMb2coKSkgfQogICAgIExhdW5jaGVkRWZmZWN0KFVuaXQpIHsgWHJheUNv
+          bnRyb2xsZXIuaW5zdGFsbENyYXNoTG9nKCk7IFhyYXlDb250cm9sbGVyLnJlZnJlc2goKTsgWHJheUNvbnRyb2xsZXIuZGV0ZWN0
+          Um9vdCgpIH0KICAgICB2YWwgcm9vdCBieSBYcmF5Q29udHJvbGxlci5yb290QXZhaWxhYmxlLmNvbGxlY3RBc1N0YXRlKCkKQEAg
+          LTY4LDYgKzgwLDcgQEAgZnVuIFZwblNjcmVlbihob3RzcG90SWZhY2VzOiBDb2xsZWN0aW9uPFN0cmluZz4pIHsKICAgICAgICAg
+          ICAgICAgICAgICAgQ29sdW1uKE1vZGlmaWVyLndlaWdodCgxZikpIHsKICAgICAgICAgICAgICAgICAgICAgICAgIFRleHQoaWYg
+          KHJ1bm5pbmcpICJWUE4gaXMgb24iIGVsc2UgIlZQTiBpcyBvZmYiLCBzdHlsZSA9IE1hdGVyaWFsVGhlbWUudHlwb2dyYXBoeS50
+          aXRsZU1lZGl1bSkKICAgICAgICAgICAgICAgICAgICAgICAgIFRleHQoc3RhdHVzLCBzdHlsZSA9IE1hdGVyaWFsVGhlbWUudHlw
+          b2dyYXBoeS5ib2R5U21hbGwpCisgICAgICAgICAgICAgICAgICAgICAgICBpZiAocGhvbmVTdGF0dXMuaXNOb3RFbXB0eSgpKSBU
+          ZXh0KHBob25lU3RhdHVzLCBzdHlsZSA9IE1hdGVyaWFsVGhlbWUudHlwb2dyYXBoeS5ib2R5U21hbGwpCiAgICAgICAgICAgICAg
+          ICAgICAgICAgICBUZXh0KGlmIChwcm94eU1vZGUpICJQcm94eSBtb2RlIChubyByb290KTogZGV2aWNlcyBvbiB5b3VyIGhvdHNw
+          b3Qgc2V0IHRoZSBwcm94eSBiZWxvdyBpbiB0aGVpciBXaS1GaSBzZXR0aW5ncy4gT25seSBhcHBzIHRoYXQgZm9sbG93IHRoZSBX
+          aS1GaSBwcm94eSBhcmUgY292ZXJlZCAoYnJvd3NlcnMgZG8sIG1hbnkgYXBwcyBhbmQgZ2FtZXMgZG8gbm90KS4iCiAgICAgICAg
+          ICAgICAgICAgICAgICAgICBlbHNlICJUcmFuc3BhcmVudCBtb2RlIChyb290KTogaG90c3BvdCBUQ1AsIEROUyBhbmQgVURQIGdv
+          IHRocm91Z2ggdGhlIHNlcnZlciB3aXRoIG5vIHNldHRpbmdzIG9uIHRoZSBvdGhlciBkZXZpY2UuIFVEUCBuZWVkcyBrZXJuZWwg
+          VFBST1hZIHN1cHBvcnQuIiwKICAgICAgICAgICAgICAgICAgICAgICAgICAgICBzdHlsZSA9IE1hdGVyaWFsVGhlbWUudHlwb2dy
+          YXBoeS5ib2R5U21hbGwpCkBAIC03Nyw3ICs5MCwxNyBAQCBmdW4gVnBuU2NyZWVuKGhvdHNwb3RJZmFjZXM6IENvbGxlY3Rpb248
+          U3RyaW5nPikgewogICAgICAgICAgICAgICAgICAgICAgICAgICAgIHRyeSB7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+          ICAgIGlmIChydW5uaW5nKSBYcmF5Q29udHJvbGxlci5zdG9wKCkKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgZWxz
+          ZSBzZXJ2ZXJzLmdldE9yTnVsbChzZWxlY3RlZCk/LmxldCB7CisgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBQ
+          aG9uZVZwbi5zZXRTdGF0dXMoIiIpCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBpZiAocHJveHlNb2RlKSBY
+          cmF5Q29udHJvbGxlci5zdGFydFByb3h5KGl0KSBlbHNlIFhyYXlDb250cm9sbGVyLnN0YXJ0KGl0LCBob3RzcG90SWZhY2VzKQor
+          ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgaWYgKFhyYXlDb250cm9sbGVyLnBob25lVnBuICYmIFhyYXlDb250
+          cm9sbGVyLnJ1bm5pbmcudmFsdWUpIHsKKyAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICB2YWwgcG9ydCA9
+          IFhyYXlDb250cm9sbGVyLnN0YXJ0UGhvbmVFbmdpbmUoaXQpCisgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+          ICAgaWYgKHBvcnQgPT0gbnVsbCkgUGhvbmVWcG4uc2V0U3RhdHVzKCJUaGlzIGRldmljZSBpcyBub3Qgb24gdGhlIFZQTiAodGhl
+          IGVuZ2luZSBkaWQgbm90IHN0YXJ0KS4gU2hhcmluZyBzdGlsbCB3b3Jrcy4iKQorICAgICAgICAgICAgICAgICAgICAgICAgICAg
+          ICAgICAgICAgICAgIGVsc2UgeworICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBwZW5kaW5nUG9y
+          dCA9IHBvcnQKKyAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgdmFsIGFzayA9IFBob25lVnBuLmNv
+          bnNlbnRJbnRlbnQoY29udGV4dCkKKyAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgaWYgKGFzayAh
+          PSBudWxsKSB2cG5Db25zZW50LmxhdW5jaChhc2spIGVsc2UgUGhvbmVWcG4uYmVnaW4ocG9ydCkKKyAgICAgICAgICAgICAgICAg
+          ICAgICAgICAgICAgICAgICAgICAgICB9CisgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICB9CiAgICAgICAgICAg
+          ICAgICAgICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgYWRkcmVzc2VzID0gWHJheUNv
+          bnRyb2xsZXIuaG90c3BvdEFkZHJlc3NlcygpCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgfSBjYXRjaCAoZToga290bGlu
+          eC5jb3JvdXRpbmVzLkNhbmNlbGxhdGlvbkV4Y2VwdGlvbikgewpkaWZmIC0tZ2l0IGEvbW9iaWxlL3NyYy9tYWluL2phdmEvYmUv
+          bXlnb2QvdnBuaG90c3BvdC91aS9WcG5TZXR0aW5ncy5rdCBiL21vYmlsZS9zcmMvbWFpbi9qYXZhL2JlL215Z29kL3ZwbmhvdHNw
+          b3QvdWkvVnBuU2V0dGluZ3Mua3QKaW5kZXggMjE2YzVlNC4uMDc2YjlkZCAxMDA2NDQKLS0tIGEvbW9iaWxlL3NyYy9tYWluL2ph
+          dmEvYmUvbXlnb2QvdnBuaG90c3BvdC91aS9WcG5TZXR0aW5ncy5rdAorKysgYi9tb2JpbGUvc3JjL21haW4vamF2YS9iZS9teWdv
+          ZC92cG5ob3RzcG90L3VpL1ZwblNldHRpbmdzLmt0CkBAIC01Niw2ICs1NiwzNSBAQCBmdW4gVnBuRG5zUm93KCkgewogICAgIH0K
+          IH0KIAorQENvbXBvc2FibGUKK2Z1biBWcG5Db3ZlcmFnZVJvdygpIHsKKyAgICB2YXIgcGhvbmUgYnkgcmVtZW1iZXIgeyBtdXRh
+          YmxlU3RhdGVPZihYcmF5Q29udHJvbGxlci5waG9uZVZwbikgfQorICAgIHZhciBlZGl0IGJ5IHJlbWVtYmVyIHsgbXV0YWJsZVN0
+          YXRlT2YoZmFsc2UpIH0KKyAgICBQcmVmZXJlbmNlUm93KAorICAgICAgICBpY29uID0gUi5kcmF3YWJsZS5pY19yb3V0ZSwKKyAg
+          ICAgICAgdGl0bGUgPSAiV2hhdCBDb25uZWN0IGNvdmVycyIsCisgICAgICAgIHN1bW1hcnkgPSAoaWYgKHBob25lKSAiVGhpcyBk
+          ZXZpY2UgYW5kIG90aGVyIGRldmljZXMiIGVsc2UgIk90aGVyIGRldmljZXMgb25seSIpICsgIi4gQXBwbGllcyBuZXh0IHRpbWUg
+          eW91IGNvbm5lY3QuIiwKKyAgICAgICAgb25DbGljayA9IHsgZWRpdCA9IHRydWUgfSwKKyAgICApCisgICAgaWYgKGVkaXQpIEFs
+          ZXJ0RGlhbG9nKAorICAgICAgICBvbkRpc21pc3NSZXF1ZXN0ID0geyBlZGl0ID0gZmFsc2UgfSwKKyAgICAgICAgdGl0bGUgPSB7
+          IFRleHQoIldoYXQgQ29ubmVjdCBjb3ZlcnMiKSB9LAorICAgICAgICB0ZXh0ID0geworICAgICAgICAgICAgQ29sdW1uIHsKKyAg
+          ICAgICAgICAgICAgICBUZXh0QnV0dG9uKG9uQ2xpY2sgPSB7IFhyYXlDb250cm9sbGVyLnBob25lVnBuID0gZmFsc2U7IHBob25l
+          ID0gZmFsc2U7IGVkaXQgPSBmYWxzZSB9KSB7CisgICAgICAgICAgICAgICAgICAgIFRleHQoaWYgKCFwaG9uZSkgIk90aGVyIGRl
+          dmljZXMgb25seSAoc2VsZWN0ZWQpIiBlbHNlICJPdGhlciBkZXZpY2VzIG9ubHkiKQorICAgICAgICAgICAgICAgIH0KKyAgICAg
+          ICAgICAgICAgICBUZXh0QnV0dG9uKG9uQ2xpY2sgPSB7IFhyYXlDb250cm9sbGVyLnBob25lVnBuID0gdHJ1ZTsgcGhvbmUgPSB0
+          cnVlOyBlZGl0ID0gZmFsc2UgfSkgeworICAgICAgICAgICAgICAgICAgICBUZXh0KGlmIChwaG9uZSkgIlRoaXMgZGV2aWNlIGFu
+          ZCBvdGhlciBkZXZpY2VzIChzZWxlY3RlZCkiIGVsc2UgIlRoaXMgZGV2aWNlIGFuZCBvdGhlciBkZXZpY2VzIikKKyAgICAgICAg
+          ICAgICAgICB9CisgICAgICAgICAgICAgICAgVGV4dCgiVGhlIHNlY29uZCBvcHRpb24gYWxzbyBwdXRzIHRoaXMgcGhvbmUgb3Ig
+          dGFibGV0IG9uIHRoZSBWUE4sIGxpa2UgYSBub3JtYWwgVlBOIGFwcC4gQW5kcm9pZCBhc2tzIGZvciBwZXJtaXNzaW9uIHRoZSBm
+          aXJzdCB0aW1lLiIpCisgICAgICAgICAgICB9CisgICAgICAgIH0sCisgICAgICAgIGNvbmZpcm1CdXR0b24gPSB7fSwKKyAgICAg
+          ICAgZGlzbWlzc0J1dHRvbiA9IHsgVGV4dEJ1dHRvbihvbkNsaWNrID0geyBlZGl0ID0gZmFsc2UgfSkgeyBUZXh0KCJDYW5jZWwi
+          KSB9IH0sCisgICAgKQorfQorCiBAQ29tcG9zYWJsZQogZnVuIFZwbkxvZ1JvdygpIHsKICAgICB2YXIgbGV2ZWwgYnkgcmVtZW1i
+          ZXIgeyBtdXRhYmxlU3RhdGVPZihYcmF5Q29udHJvbGxlci5sb2dMZXZlbCkgfQpkaWZmIC0tZ2l0IGEvbW9iaWxlL3NyYy9tYWlu
+          L2phdmEvYmUvbXlnb2QvdnBuaG90c3BvdC94cmF5L1Bob25lVnBuLmt0IGIvbW9iaWxlL3NyYy9tYWluL2phdmEvYmUvbXlnb2Qv
+          dnBuaG90c3BvdC94cmF5L1Bob25lVnBuLmt0Cm5ldyBmaWxlIG1vZGUgMTAwNjQ0CmluZGV4IDAwMDAwMDAuLjdmN2IwZTMKLS0t
+          IC9kZXYvbnVsbAorKysgYi9tb2JpbGUvc3JjL21haW4vamF2YS9iZS9teWdvZC92cG5ob3RzcG90L3hyYXkvUGhvbmVWcG4ua3QK
+          QEAgLTAsMCArMSwxMzEgQEAKK3BhY2thZ2UgYmUubXlnb2QudnBuaG90c3BvdC54cmF5CisKK2ltcG9ydCBhbmRyb2lkLmNvbnRl
+          bnQuQ29udGV4dAoraW1wb3J0IGFuZHJvaWQuY29udGVudC5JbnRlbnQKK2ltcG9ydCBhbmRyb2lkLm5ldC5WcG5TZXJ2aWNlCitp
+          bXBvcnQgYW5kcm9pZC5vcy5QYXJjZWxGaWxlRGVzY3JpcHRvcgoraW1wb3J0IGJlLm15Z29kLnZwbmhvdHNwb3QuQXBwLkNvbXBh
+          bmlvbi5hcHAKK2ltcG9ydCBoZXYuaHRwcm94eS5UUHJveHlTZXJ2aWNlCitpbXBvcnQga290bGlueC5jb3JvdXRpbmVzLmZsb3cu
+          TXV0YWJsZVN0YXRlRmxvdworaW1wb3J0IGtvdGxpbnguY29yb3V0aW5lcy5mbG93LlN0YXRlRmxvdworaW1wb3J0IGphdmEuaW8u
+          RmlsZQorCisvKiogUHV0cyB0aGlzIHBob25lJ3Mgb3duIHRyYWZmaWMgb24gdGhlIFZQTiB0b28sIG5leHQgdG8gc2hhcmluZyBp
+          dCB3aXRoIG90aGVyIGRldmljZXMuICovCitvYmplY3QgUGhvbmVWcG4geworICAgIHByaXZhdGUgdmFsIF9zdGF0dXMgPSBNdXRh
+          YmxlU3RhdGVGbG93KCIiKQorICAgIHZhbCBzdGF0dXM6IFN0YXRlRmxvdzxTdHJpbmc+IGdldCgpID0gX3N0YXR1cworICAgIGZ1
+          biBzZXRTdGF0dXMoczogU3RyaW5nKSB7IF9zdGF0dXMudmFsdWUgPSBzIH0KKworICAgIC8qKiBTdGFydHMgdGhlIFZQTiBpbnRl
+          cmZhY2UuIFtwb3J0XSBpcyB0aGUgbG9jYWwgU09DS1MgcG9ydCBvZiB0aGUgWHJheSBlbmdpbmUgdGhpcyBwaG9uZSB1c2VzLiAq
+          LworICAgIGZ1biBiZWdpbihwb3J0OiBJbnQpIHsKKyAgICAgICAgYXBwLnN0YXJ0U2VydmljZShJbnRlbnQoYXBwLCBQaG9uZVZw
+          blNlcnZpY2U6OmNsYXNzLmphdmEpLnB1dEV4dHJhKCJwb3J0IiwgcG9ydCkpCisgICAgfQorCisgICAgZnVuIHN0b3AoKSB7Cisg
+          ICAgICAgIHRyeSB7IGFwcC5zdG9wU2VydmljZShJbnRlbnQoYXBwLCBQaG9uZVZwblNlcnZpY2U6OmNsYXNzLmphdmEpKSB9IGNh
+          dGNoIChfOiBUaHJvd2FibGUpIHsgfQorICAgICAgICBfc3RhdHVzLnZhbHVlID0gIiIKKyAgICB9CisKKyAgICAvKiogVHJ1ZSB3
+          aGVuIEFuZHJvaWQgc3RpbGwgbmVlZHMgdG8gc2hvdyBpdHMgb25lLXRpbWUgImNvbm5lY3Rpb24gcmVxdWVzdCIgYm94LiAqLwor
+          ICAgIGZ1biBjb25zZW50SW50ZW50KGNvbnRleHQ6IENvbnRleHQpOiBJbnRlbnQ/ID0gVnBuU2VydmljZS5wcmVwYXJlKGNvbnRl
+          eHQpCisKKyAgICAvKiogMC4wLjAuMC8wIG1pbnVzIHByaXZhdGUgYW5kIGxvY2FsIHJhbmdlcywgYXMgQ0lEUiBibG9ja3MsIHNv
+          IGRldmljZXMgb24gdGhlIGxvY2FsIG5ldHdvcmsgc3RheSByZWFjaGFibGUuICovCisgICAgZnVuIHJvdXRlcygpOiBMaXN0PFBh
+          aXI8U3RyaW5nLCBJbnQ+PiB7CisgICAgICAgIGZ1biBpcChzOiBTdHJpbmcpOiBMb25nID0gcy5zcGxpdCgnLicpLmZvbGQoMEwp
+          IHsgYSwgcCAtPiBhICogMjU2ICsgcC50b0xvbmcoKSB9CisgICAgICAgIHZhbCBleGNsdWRlZCA9IGxpc3RPZigiMTAuMC4wLjAi
+          IHRvIDgsICIxMjcuMC4wLjAiIHRvIDgsICIxNjkuMjU0LjAuMCIgdG8gMTYsICIxNzIuMTYuMC4wIiB0byAxMiwKKyAgICAgICAg
+          ICAgICIxOTIuMTY4LjAuMCIgdG8gMTYsICIyMjQuMC4wLjAiIHRvIDQpCisgICAgICAgIHZhciByYW5nZXMgPSBsaXN0T2YoMEwg
+          dG8gMHhGRkZGRkZGRkwpCisgICAgICAgIGZvciAoKGJhc2UsIGxlbikgaW4gZXhjbHVkZWQpIHsKKyAgICAgICAgICAgIHZhbCBz
+          ID0gaXAoYmFzZSkKKyAgICAgICAgICAgIHZhbCBlID0gcyArICgxTCBzaGwgKDMyIC0gbGVuKSkgLSAxCisgICAgICAgICAgICBy
+          YW5nZXMgPSByYW5nZXMuZmxhdE1hcCB7IChhLCBiKSAtPgorICAgICAgICAgICAgICAgIGlmIChlIDwgYSB8fCBzID4gYikgbGlz
+          dE9mKGEgdG8gYikgZWxzZSBidWlsZExpc3QgeworICAgICAgICAgICAgICAgICAgICBpZiAocyA+IGEpIGFkZChhIHRvIHMgLSAx
+          KQorICAgICAgICAgICAgICAgICAgICBpZiAoZSA8IGIpIGFkZChlICsgMSB0byBiKQorICAgICAgICAgICAgICAgIH0KKyAgICAg
+          ICAgICAgIH0KKyAgICAgICAgfQorICAgICAgICB2YWwgb3V0ID0gQXJyYXlMaXN0PFBhaXI8U3RyaW5nLCBJbnQ+PigpCisgICAg
+          ICAgIGZvciAoKGEwLCBiKSBpbiByYW5nZXMpIHsKKyAgICAgICAgICAgIHZhciBhID0gYTAKKyAgICAgICAgICAgIHdoaWxlIChh
+          IDw9IGIpIHsKKyAgICAgICAgICAgICAgICB2YXIgc2l6ZSA9IGlmIChhID09IDBMKSAxTCBzaGwgMzIgZWxzZSBhIGFuZCAtYQor
+          ICAgICAgICAgICAgICAgIHdoaWxlIChhICsgc2l6ZSAtIDEgPiBiKSBzaXplID0gc2l6ZSBzaHIgMQorICAgICAgICAgICAgICAg
+          IHZhbCBsZW4gPSAzMiAtIGphdmEubGFuZy5Mb25nLm51bWJlck9mVHJhaWxpbmdaZXJvcyhzaXplKQorICAgICAgICAgICAgICAg
+          IG91dC5hZGQoIiR7KGEgc2hyIDI0KSBhbmQgMjU1fS4keyhhIHNociAxNikgYW5kIDI1NX0uJHsoYSBzaHIgOCkgYW5kIDI1NX0u
+          JHthIGFuZCAyNTV9IiB0byBsZW4pCisgICAgICAgICAgICAgICAgYSArPSBzaXplCisgICAgICAgICAgICB9CisgICAgICAgIH0K
+          KyAgICAgICAgcmV0dXJuIG91dAorICAgIH0KK30KKworY2xhc3MgUGhvbmVWcG5TZXJ2aWNlIDogVnBuU2VydmljZSgpIHsKKyAg
+          ICBwcml2YXRlIHZhciB0dW46IFBhcmNlbEZpbGVEZXNjcmlwdG9yPyA9IG51bGwKKworICAgIG92ZXJyaWRlIGZ1biBvblN0YXJ0
+          Q29tbWFuZChpbnRlbnQ6IEludGVudD8sIGZsYWdzOiBJbnQsIHN0YXJ0SWQ6IEludCk6IEludCB7CisgICAgICAgIHZhbCBwb3J0
+          ID0gaW50ZW50Py5nZXRJbnRFeHRyYSgicG9ydCIsIFhyYXlDb250cm9sbGVyLlNPQ0tTX1BPUlQpID86IFhyYXlDb250cm9sbGVy
+          LlNPQ0tTX1BPUlQKKyAgICAgICAgdHJ5IHsKKyAgICAgICAgICAgIHN0YXJ0VHVubmVsKHBvcnQpCisgICAgICAgIH0gY2F0Y2gg
+          KGU6IFRocm93YWJsZSkgeworICAgICAgICAgICAgWHJheUNvbnRyb2xsZXIuYXBwZW5kTG9nKCJQaG9uZSBWUE4gZmFpbGVkOiAk
+          e2UuamF2YUNsYXNzLnNpbXBsZU5hbWV9ICR7ZS5tZXNzYWdlfSIpCisgICAgICAgICAgICBQaG9uZVZwbi5zZXRTdGF0dXMoIlRo
+          aXMgZGV2aWNlIGlzIG5vdCBvbiB0aGUgVlBOICgke2UuamF2YUNsYXNzLnNpbXBsZU5hbWV9KS4gU2hhcmluZyBzdGlsbCB3b3Jr
+          cy4iKQorICAgICAgICAgICAgc3RvcFR1bm5lbCgpCisgICAgICAgICAgICBzdG9wU2VsZigpCisgICAgICAgIH0KKyAgICAgICAg
+          cmV0dXJuIFNUQVJUX05PVF9TVElDS1kKKyAgICB9CisKKyAgICBwcml2YXRlIGZ1biBzdGFydFR1bm5lbChwb3J0OiBJbnQpIHsK
+          KyAgICAgICAgc3RvcFR1bm5lbCgpCisgICAgICAgIHZhbCBiID0gQnVpbGRlcigpLnNldFNlc3Npb24oIlJvdXRpZnkiKS5zZXRN
+          dHUoMTUwMCkKKyAgICAgICAgICAgIC5hZGRBZGRyZXNzKCIxOTguMTguMC4xIiwgMzIpLmFkZEFkZHJlc3MoImZjMDA6OjEiLCAx
+          MjgpCisgICAgICAgICAgICAuYWRkRG5zU2VydmVyKCIxOTguMTguMC4yIikKKyAgICAgICAgICAgIC5hZGREaXNhbGxvd2VkQXBw
+          bGljYXRpb24ocGFja2FnZU5hbWUpCisgICAgICAgIGZvciAoKGlwLCBsZW4pIGluIFBob25lVnBuLnJvdXRlcygpKSBiLmFkZFJv
+          dXRlKGlwLCBsZW4pCisgICAgICAgIGIuYWRkUm91dGUoIjo6IiwgMCkKKyAgICAgICAgdmFsIGZkID0gYi5lc3RhYmxpc2goKSA/
+          OiBlcnJvcigiQW5kcm9pZCByZWZ1c2VkIHRoZSBWUE4gaW50ZXJmYWNlIikKKyAgICAgICAgdHVuID0gZmQKKyAgICAgICAgdmFs
+          IGNmZyA9IEZpbGUoZ2V0RGlyKCJ4cmF5IiwgTU9ERV9QUklWQVRFKSwgInR1bi55bWwiKQorICAgICAgICBjZmcud3JpdGVUZXh0
+          KCIiIgorICAgICAgICAgICAgdHVubmVsOgorICAgICAgICAgICAgICBtdHU6IDE1MDAKKyAgICAgICAgICAgICAgaXB2NDogMTk4
+          LjE4LjAuMQorICAgICAgICAgICAgICBpcHY2OiAnZmMwMDo6MScKKyAgICAgICAgICAgIHNvY2tzNToKKyAgICAgICAgICAgICAg
+          cG9ydDogJHBvcnQKKyAgICAgICAgICAgICAgYWRkcmVzczogMTI3LjAuMC4xCisgICAgICAgICAgICAgIHVkcDogJ3VkcCcKKyAg
+          ICAgICAgICAgICAgdWRwLWFkZHJlc3M6IDEyNy4wLjAuMQorICAgICAgICAgICAgbWFwZG5zOgorICAgICAgICAgICAgICBhZGRy
+          ZXNzOiAxOTguMTguMC4yCisgICAgICAgICAgICAgIHBvcnQ6IDUzCisgICAgICAgICAgICAgIG5ldHdvcms6IDEwMC42NC4wLjAK
+          KyAgICAgICAgICAgICAgbmV0bWFzazogMjU1LjE5Mi4wLjAKKyAgICAgICAgICAgICAgY2FjaGUtc2l6ZTogMTAwMDAKKyAgICAg
+          ICAgICAgIG1pc2M6CisgICAgICAgICAgICAgIGxvZy1sZXZlbDogd2FybgorICAgICAgICAiIiIudHJpbUluZGVudCgpICsgIlxu
+          IikKKyAgICAgICAgY2hlY2soVFByb3h5U2VydmljZS5UUHJveHlTdGFydFNlcnZpY2UoY2ZnLmFic29sdXRlUGF0aCwgZmQuZmQp
+          KSB7ICJ0dW5uZWwgZGlkIG5vdCBzdGFydCIgfQorICAgICAgICBQaG9uZVZwbi5zZXRTdGF0dXMoIlRoaXMgZGV2aWNlIGlzIG9u
+          IHRoZSBWUE4gdG9vIikKKyAgICAgICAgWHJheUNvbnRyb2xsZXIuYXBwZW5kTG9nKCJQaG9uZSBWUE4gb24gKFNPQ0tTIHBvcnQg
+          JHBvcnQpIikKKyAgICAgICAgdHJ5IHsgWHJheVNlcnZpY2Uuc3RhcnQoKSB9IGNhdGNoIChlOiBUaHJvd2FibGUpIHsgWHJheUNv
+          bnRyb2xsZXIuYXBwZW5kTG9nKCJCYWNrZ3JvdW5kIG5vdGlmaWNhdGlvbjogJHtlLmphdmFDbGFzcy5zaW1wbGVOYW1lfSIpIH0K
+          KyAgICB9CisKKyAgICBwcml2YXRlIGZ1biBzdG9wVHVubmVsKCkgeworICAgICAgICB0cnkgeyBUUHJveHlTZXJ2aWNlLlRQcm94
+          eVN0b3BTZXJ2aWNlKCkgfSBjYXRjaCAoXzogVGhyb3dhYmxlKSB7IH0KKyAgICAgICAgdHJ5IHsgdHVuPy5jbG9zZSgpIH0gY2F0
+          Y2ggKF86IFRocm93YWJsZSkgeyB9CisgICAgICAgIHR1biA9IG51bGwKKyAgICB9CisKKyAgICBvdmVycmlkZSBmdW4gb25SZXZv
+          a2UoKSB7CisgICAgICAgIFBob25lVnBuLnNldFN0YXR1cygiVGhpcyBkZXZpY2UgbGVmdCB0aGUgVlBOIChhbm90aGVyIFZQTiBh
+          cHAgdG9vayBvdmVyKS4gU2hhcmluZyBzdGlsbCB3b3Jrcy4iKQorICAgICAgICBzdG9wVHVubmVsKCkKKyAgICAgICAgc3VwZXIu
+          b25SZXZva2UoKQorICAgIH0KKworICAgIG92ZXJyaWRlIGZ1biBvbkRlc3Ryb3koKSB7CisgICAgICAgIHN0b3BUdW5uZWwoKQor
+          ICAgICAgICBzdXBlci5vbkRlc3Ryb3koKQorICAgIH0KK30KZGlmZiAtLWdpdCBhL21vYmlsZS9zcmMvbWFpbi9qYXZhL2JlL215
+          Z29kL3ZwbmhvdHNwb3QveHJheS9YcmF5Q29udHJvbGxlci5rdCBiL21vYmlsZS9zcmMvbWFpbi9qYXZhL2JlL215Z29kL3Zwbmhv
+          dHNwb3QveHJheS9YcmF5Q29udHJvbGxlci5rdAppbmRleCBmM2QxOTE4Li5mMWNkNDM2IDEwMDY0NAotLS0gYS9tb2JpbGUvc3Jj
+          L21haW4vamF2YS9iZS9teWdvZC92cG5ob3RzcG90L3hyYXkvWHJheUNvbnRyb2xsZXIua3QKKysrIGIvbW9iaWxlL3NyYy9tYWlu
+          L2phdmEvYmUvbXlnb2QvdnBuaG90c3BvdC94cmF5L1hyYXlDb250cm9sbGVyLmt0CkBAIC0yNiw2ICsyNiw4IEBAIG9iamVjdCBY
+          cmF5Q29udHJvbGxlciB7CiAgICAgcHJpdmF0ZSBjb25zdCB2YWwgVURQX1BPUlQgPSAxMjM0NwogICAgIGNvbnN0IHZhbCBIVFRQ
+          X1BPUlQgPSA4MDgwCiAgICAgY29uc3QgdmFsIFNPQ0tTX1BPUlQgPSAxMDgwCisgICAgLyoqIExvY2FsIFNPQ0tTIHBvcnQgb2Yg
+          dGhlIHNlcGFyYXRlIGVuZ2luZSB0aGlzIHBob25lIHVzZXMgd2hlbiByb290IG1vZGUgaXMgb24uICovCisgICAgY29uc3QgdmFs
+          IFBIT05FX1BPUlQgPSAxMDgxCiAgICAgLyoqIEJpdCAyNTogbWFya3MgVURQIHRoYXQgVFBST1hZIGhhbmRzIHRvIFhyYXkgKHJv
+          dXRlZCB0byBsb29wYmFjayBieSBhIHBvbGljeSBydWxlKS4gKi8KICAgICBwcml2YXRlIGNvbnN0IHZhbCBUTUFSSyA9IDB4MjAw
+          MDAwMAogICAgIHByaXZhdGUgY29uc3QgdmFsIFVDSEFJTiA9ICJST1VUSUZZX1VEUCIKQEAgLTYyLDYgKzY0LDUzIEBAIG9iamVj
+          dCBYcmF5Q29udHJvbGxlciB7CiAgICAgICAgIGdldCgpID0gcHJlZnMuZ2V0U3RyaW5nKCJkbnNfc2VydmVyIiwgbnVsbCk/LnRh
+          a2VJZiB7IGlzSXB2NChpdCkgfSA/OiAiMS4xLjEuMSIKICAgICAgICAgc2V0KHYpID0gcHJlZnMuZWRpdCgpLnB1dFN0cmluZygi
+          ZG5zX3NlcnZlciIsIHYpLmFwcGx5KCkKICAgICBmdW4gaXNJcHY0KHM6IFN0cmluZykgPSBSZWdleCgiXigoMjVbMC01XXwyWzAt
+          NF1bMC05XXwxP1swLTldP1swLTldKVxcLil7M30oMjVbMC01XXwyWzAtNF1bMC05XXwxP1swLTldP1swLTldKSQiKS5tYXRjaGVz
+          KHMpCisgICAgLyoqIE9mZjogQ29ubmVjdCBzaGFyZXMgdG8gb3RoZXIgZGV2aWNlcyBvbmx5LiBPbjogdGhpcyBwaG9uZSBvciB0
+          YWJsZXQgaXMgb24gdGhlIFZQTiB0b28uICovCisgICAgdmFyIHBob25lVnBuOiBCb29sZWFuCisgICAgICAgIGdldCgpID0gcHJl
+          ZnMuZ2V0Qm9vbGVhbigicGhvbmVfdnBuIiwgZmFsc2UpCisgICAgICAgIHNldCh2KSA9IHByZWZzLmVkaXQoKS5wdXRCb29sZWFu
+          KCJwaG9uZV92cG4iLCB2KS5hcHBseSgpCisKKyAgICBwcml2YXRlIHZhciBwaG9uZVByb2M6IGphdmEubGFuZy5Qcm9jZXNzPyA9
+          IG51bGwKKworICAgIC8qKgorICAgICAqIEVuZ2luZSBmb3IgdGhpcyBkZXZpY2UncyBvd24gdHJhZmZpYy4gUHJveHkgbW9kZSBh
+          bHJlYWR5IGhhcyBvbmUgb24gU09DS1MgMTA4MDsgaW4gcm9vdCBtb2RlIHRoZSBzaGFyaW5nIGVuZ2luZSBydW5zCisgICAgICog
+          YXMgcm9vdCwgc28gdGhpcyBkZXZpY2UgZ2V0cyBpdHMgb3duIGVuZ2luZSB0aGF0IHJ1bnMgYXMgUm91dGlmeSAod2hpY2ggdGhl
+          IFZQTiBza2lwcywgc28gdGhlcmUgaXMgbm8gbG9vcCkuCisgICAgICogUmV0dXJucyB0aGUgbG9jYWwgU09DS1MgcG9ydCwgb3Ig
+          bnVsbCB3aGVuIHRoZSBlbmdpbmUgZGlkIG5vdCBzdGFydC4KKyAgICAgKi8KKyAgICBzdXNwZW5kIGZ1biBzdGFydFBob25lRW5n
+          aW5lKHNlcnZlcjogWHJheVNlcnZlcik6IEludD8geworICAgICAgICB0cnkgeworICAgICAgICAgICAgaWYgKHByb3h5UHJvYz8u
+          aXNBbGl2ZSA9PSB0cnVlKSByZXR1cm4gU09DS1NfUE9SVAorICAgICAgICAgICAgdmFsIGxpYiA9IHdpdGhDb250ZXh0KERpc3Bh
+          dGNoZXJzLklPKSB7IHByZXBhcmVCaW5hcnkoKSB9ID86IHJldHVybiBudWxsCisgICAgICAgICAgICBzdG9wUGhvbmVFbmdpbmUo
+          KQorICAgICAgICAgICAgdmFsIHJlc29sdmVkID0gd2l0aENvbnRleHQoRGlzcGF0Y2hlcnMuSU8pIHsgcGluSWZOZWVkZWQocmVz
+          b2x2ZShzZXJ2ZXIpKSB9CisgICAgICAgICAgICByZXR1cm4gd2l0aENvbnRleHQoRGlzcGF0Y2hlcnMuSU8pIHsKKyAgICAgICAg
+          ICAgICAgICBGaWxlKGRpciwgInBob25lLmpzb24iKS53cml0ZVRleHQoY29uZmlnKHJlc29sdmVkLCBwcm94eSA9IHRydWUsIHBo
+          b25lID0gdHJ1ZSkpCisgICAgICAgICAgICAgICAgdmFsIHBiID0gUHJvY2Vzc0J1aWxkZXIoIi9zeXN0ZW0vYmluL3NoIiwgIi1j
+          IiwKKyAgICAgICAgICAgICAgICAgICAgImVjaG8gXCRcJCA+ICR7cXVvdGUoRmlsZShkaXIsICJwaG9uZS5waWQiKS5hYnNvbHV0
+          ZVBhdGgpfTsgZXhlYyAke3F1b3RlKGxpYil9IHJ1biAtYyAke3F1b3RlKEZpbGUoZGlyLCAicGhvbmUuanNvbiIpLmFic29sdXRl
+          UGF0aCl9IikKKyAgICAgICAgICAgICAgICAgICAgLmRpcmVjdG9yeShkaXIpLnJlZGlyZWN0RXJyb3JTdHJlYW0odHJ1ZSkucmVk
+          aXJlY3RPdXRwdXQoRmlsZShkaXIsICJwaG9uZS5sb2ciKSkKKyAgICAgICAgICAgICAgICBwYi5lbnZpcm9ubWVudCgpWyJYUkFZ
+          X0xPQ0FUSU9OX0FTU0VUIl0gPSBkaXIuYWJzb2x1dGVQYXRoCisgICAgICAgICAgICAgICAgcGhvbmVQcm9jID0gcGIuc3RhcnQo
+          KQorICAgICAgICAgICAgICAgIFRocmVhZC5zbGVlcCgxMjAwKQorICAgICAgICAgICAgICAgIGlmIChwaG9uZVByb2M/LmlzQWxp
+          dmUgPT0gdHJ1ZSkgUEhPTkVfUE9SVCBlbHNlIG51bGwKKyAgICAgICAgICAgIH0KKyAgICAgICAgfSBjYXRjaCAoZToga290bGlu
+          eC5jb3JvdXRpbmVzLkNhbmNlbGxhdGlvbkV4Y2VwdGlvbikgeworICAgICAgICAgICAgdGhyb3cgZQorICAgICAgICB9IGNhdGNo
+          IChlOiBUaHJvd2FibGUpIHsKKyAgICAgICAgICAgIGFwcGVuZExvZygiUGhvbmUgZW5naW5lOiAke2UuamF2YUNsYXNzLnNpbXBs
+          ZU5hbWV9IikKKyAgICAgICAgICAgIHJldHVybiBudWxsCisgICAgICAgIH0KKyAgICB9CisKKyAgICBmdW4gc3RvcFBob25lRW5n
+          aW5lKCkgeworICAgICAgICB0cnkgeyBwaG9uZVByb2M/LmRlc3Ryb3koKSB9IGNhdGNoIChfOiBUaHJvd2FibGUpIHsgfQorICAg
+          ICAgICBwaG9uZVByb2MgPSBudWxsCisgICAgICAgIHRyeSB7CisgICAgICAgICAgICBGaWxlKGRpciwgInBob25lLnBpZCIpLnRh
+          a2VJZiB7IGl0LmV4aXN0cygpIH0/LnJlYWRUZXh0KCk/LnRyaW0oKT8udG9JbnRPck51bGwoKT8ubGV0IHsKKyAgICAgICAgICAg
+          ICAgICBpZiAodHJ5IHsgRmlsZSgiL3Byb2MvJGl0L2NtZGxpbmUiKS5yZWFkVGV4dCgpLmNvbnRhaW5zKCJsaWJ4cmF5IikgfSBj
+          YXRjaCAoXzogVGhyb3dhYmxlKSB7IGZhbHNlIH0pIGFuZHJvaWQub3MuUHJvY2Vzcy5raWxsUHJvY2VzcyhpdCkKKyAgICAgICAg
+          ICAgIH0KKyAgICAgICAgICAgIEZpbGUoZGlyLCAicGhvbmUucGlkIikuZGVsZXRlKCkKKyAgICAgICAgfSBjYXRjaCAoXzogVGhy
+          b3dhYmxlKSB7IH0KKyAgICB9CisKICAgICAvKiogWHJheSBsb2cgbGV2ZWw6IHdhcm5pbmcsIGluZm8gb3IgZGVidWcuICovCiAg
+          ICAgdmFyIGxvZ0xldmVsOiBTdHJpbmcKICAgICAgICAgZ2V0KCkgPSBwcmVmcy5nZXRTdHJpbmcoImxvZ19sZXZlbCIsIG51bGwp
+          Py50YWtlSWYgeyBpdCBpbiBMT0dfTEVWRUxTIH0gPzogIndhcm5pbmciCkBAIC03OCw5ICsxMjcsMTIgQEAgb2JqZWN0IFhyYXlD
+          b250cm9sbGVyIHsKICAgICAgICAgcHJlZnMuZWRpdCgpLnB1dFN0cmluZygiZGlyZWN0X21hY3MiLCBKU09OQXJyYXkobS50b0xp
+          c3QoKSkudG9TdHJpbmcoKSkuYXBwbHkoKQogICAgIH0KIAotICAgIHByaXZhdGUgZnVuIGNvbmZpZyhzZXJ2ZXI6IFhyYXlTZXJ2
+          ZXIsIHByb3h5OiBCb29sZWFuID0gZmFsc2UpOiBTdHJpbmcgeworICAgIHByaXZhdGUgZnVuIGNvbmZpZyhzZXJ2ZXI6IFhyYXlT
+          ZXJ2ZXIsIHByb3h5OiBCb29sZWFuID0gZmFsc2UsIHBob25lOiBCb29sZWFuID0gZmFsc2UpOiBTdHJpbmcgewogICAgICAgICB2
+          YWwgaW5ib3VuZHMgPSBKU09OQXJyYXkoKQotICAgICAgICBpZiAocHJveHkpIHsKKyAgICAgICAgaWYgKHBob25lKSB7CisgICAg
+          ICAgICAgICBpbmJvdW5kcy5wdXQoSlNPTk9iamVjdCgpLnB1dCgidGFnIiwgInNvY2tzLWluIikucHV0KCJwb3J0IiwgUEhPTkVf
+          UE9SVCkucHV0KCJsaXN0ZW4iLCAiMTI3LjAuMC4xIikKKyAgICAgICAgICAgICAgICAucHV0KCJwcm90b2NvbCIsICJzb2NrcyIp
+          LnB1dCgic2V0dGluZ3MiLCBKU09OT2JqZWN0KCkucHV0KCJ1ZHAiLCB0cnVlKS5wdXQoImF1dGgiLCAibm9hdXRoIikpKQorICAg
+          ICAgICB9IGVsc2UgaWYgKHByb3h5KSB7CiAgICAgICAgICAgICBpbmJvdW5kcy5wdXQoSlNPTk9iamVjdCgpLnB1dCgidGFnIiwg
+          Imh0dHAtaW4iKS5wdXQoInBvcnQiLCBIVFRQX1BPUlQpLnB1dCgibGlzdGVuIiwgIjAuMC4wLjAiKQogICAgICAgICAgICAgICAg
+          IC5wdXQoInByb3RvY29sIiwgImh0dHAiKS5wdXQoInNldHRpbmdzIiwgSlNPTk9iamVjdCgpKSkKICAgICAgICAgICAgIGluYm91
+          bmRzLnB1dChKU09OT2JqZWN0KCkucHV0KCJ0YWciLCAic29ja3MtaW4iKS5wdXQoInBvcnQiLCBTT0NLU19QT1JUKS5wdXQoImxp
+          c3RlbiIsICIwLjAuMC4wIikKQEAgLTEwMiw3ICsxNTQsNyBAQCBvYmplY3QgWHJheUNvbnRyb2xsZXIgewogICAgICAgICByZXR1
+          cm4gSlNPTk9iamVjdCgpCiAgICAgICAgICAgICAucHV0KCJsb2ciLCBKU09OT2JqZWN0KCkucHV0KCJsb2dsZXZlbCIsIGxvZ0xl
+          dmVsKSkKICAgICAgICAgICAgIC5wdXQoImluYm91bmRzIiwgaW5ib3VuZHMpCi0gICAgICAgICAgICAucHV0KCJvdXRib3VuZHMi
+          LCBKU09OQXJyYXkoKS5wdXQoc2VydmVyLm91dGJvdW5kKG1hcmsgPSAhcHJveHkpKSkKKyAgICAgICAgICAgIC5wdXQoIm91dGJv
+          dW5kcyIsIEpTT05BcnJheSgpLnB1dChzZXJ2ZXIub3V0Ym91bmQobWFyayA9ICFwcm94eSAmJiAhcGhvbmUpKSkKICAgICAgICAg
+          ICAgIC50b1N0cmluZygpCiAgICAgfQogCkBAIC00MDAsNiArNDUyLDggQEAgb2JqZWN0IFhyYXlDb250cm9sbGVyIHsKICAgICB9
+          CiAKICAgICBzdXNwZW5kIGZ1biBzdG9wKCkgeworICAgICAgICBQaG9uZVZwbi5zdG9wKCkKKyAgICAgICAgc3RvcFBob25lRW5n
+          aW5lKCkKICAgICAgICAgaWYgKHByb3h5UHJvYyAhPSBudWxsIHx8IHVzZVByb3h5KCkgfHwgRmlsZShkaXIsICJzdGF0ZSIpLnRh
+          a2VJZiB7IGl0LmV4aXN0cygpIH0/LnJlYWRUZXh0KCk/LnRyaW0oKSA9PSAicHJveHkiKSB7CiAgICAgICAgICAgICBzdG9wUHJv
+          eHlQcm9jZXNzKCkKICAgICAgICAgICAgIF9ydW5uaW5nLnZhbHVlID0gZmFsc2UKQEAgLTQwNyw2ICs0NjEsNyBAQCBvYmplY3Qg
+          WHJheUNvbnRyb2xsZXIgewogICAgICAgICAgICAgdHJ5IHsgRmlsZShkaXIsICJzdGF0ZSIpLndyaXRlVGV4dCgic3RvcHBlZCIp
+          IH0gY2F0Y2ggKF86IFRocm93YWJsZSkgeyB9CiAgICAgICAgICAgICByZXR1cm4KICAgICAgICAgfQorICAgICAgICB0cnkgeyBY
+          cmF5U2VydmljZS5zdG9wKCkgfSBjYXRjaCAoXzogVGhyb3dhYmxlKSB7IH0KICAgICAgICAgdHJ5IHsKICAgICAgICAgICAgIFJv
+          b3RNYW5hZ2VyLnVzZSB7IGl0LmV4ZWN1dGUoUnVuU2hlbGwoc3RvcFNjcmlwdChkaXIuYWJzb2x1dGVQYXRoKSArICJcbmVjaG8g
+          c3RvcHBlZCA+ICR7ZGlyLmFic29sdXRlUGF0aH0vc3RhdGU7IGNobW9kIGErciAke2Rpci5hYnNvbHV0ZVBhdGh9L3N0YXRlIikp
+          IH0KICAgICAgICAgICAgIHJlZnJlc2goKQpkaWZmIC0tZ2l0IGEvbW9iaWxlL3NyYy9tYWluL2phdmEvYmUvbXlnb2QvdnBuaG90
+          c3BvdC94cmF5L1hyYXlTZXJ2aWNlLmt0IGIvbW9iaWxlL3NyYy9tYWluL2phdmEvYmUvbXlnb2QvdnBuaG90c3BvdC94cmF5L1hy
+          YXlTZXJ2aWNlLmt0CmluZGV4IGE3NmE5YjUuLmQwNmZhMjYgMTAwNjQ0Ci0tLSBhL21vYmlsZS9zcmMvbWFpbi9qYXZhL2JlL215
+          Z29kL3ZwbmhvdHNwb3QveHJheS9YcmF5U2VydmljZS5rdAorKysgYi9tb2JpbGUvc3JjL21haW4vamF2YS9iZS9teWdvZC92cG5o
+          b3RzcG90L3hyYXkvWHJheVNlcnZpY2Uua3QKQEAgLTI2LDcgKzI2LDcgQEAgY2xhc3MgWHJheVNlcnZpY2UgOiBTZXJ2aWNlKCkg
+          ewogICAgICAgICB9CiAgICAgICAgIHZhbCBuID0gTm90aWZpY2F0aW9uLkJ1aWxkZXIodGhpcywgQ0hBTk5FTCkKICAgLnNldENv
+          bnRlbnRUaXRsZSgiUm91dGlmeSBpcyBvbiIpCi0gIC5zZXRDb250ZW50VGV4dCgiUHJveHkgcnVubmluZyAoSFRUUCA4MDgwLCBT
+          T0NLUyAxMDgwKS4gVGFwIHRvIG9wZW4uIikKKyAgLnNldENvbnRlbnRUZXh0KCJSb3V0aWZ5IGlzIHJ1bm5pbmcgaW4gdGhlIGJh
+          Y2tncm91bmQuIFRhcCB0byBvcGVuLiIpCiAgIC5zZXRTbWFsbEljb24oUi5kcmF3YWJsZS5pY19yb3V0ZSkKICAgLnNldE9uZ29p
+          bmcodHJ1ZSkKICAgLnNldENvbnRlbnRJbnRlbnQob3BlbikKZGlmZiAtLWdpdCBhL21vYmlsZS9zcmMvbWFpbi9qYXZhL2hldi9o
+          dHByb3h5L1RQcm94eVNlcnZpY2UuamF2YSBiL21vYmlsZS9zcmMvbWFpbi9qYXZhL2hldi9odHByb3h5L1RQcm94eVNlcnZpY2Uu
+          amF2YQpuZXcgZmlsZSBtb2RlIDEwMDY0NAppbmRleCAwMDAwMDAwLi44MmQxYTU1Ci0tLSAvZGV2L251bGwKKysrIGIvbW9iaWxl
+          L3NyYy9tYWluL2phdmEvaGV2L2h0cHJveHkvVFByb3h5U2VydmljZS5qYXZhCkBAIC0wLDAgKzEsMTYgQEAKK3BhY2thZ2UgaGV2
+          Lmh0cHJveHk7CisKKy8qKiBKTkkgYnJpZGdlIHRvIGhldi1zb2NrczUtdHVubmVsIChNSVQgbGljZW5zZSksIHdoaWNoIHR1cm5z
+          IHRoZSBWUE4gaW50ZXJmYWNlIGludG8gU09DS1M1IHRyYWZmaWMuICovCitwdWJsaWMgY2xhc3MgVFByb3h5U2VydmljZSB7Cisg
+          ICAgc3RhdGljIHsKKyAgICAgICAgU3lzdGVtLmxvYWRMaWJyYXJ5KCJoZXYtc29ja3M1LXR1bm5lbCIpOworICAgIH0KKworICAg
+          IHB1YmxpYyBzdGF0aWMgbmF0aXZlIGJvb2xlYW4gVFByb3h5U3RhcnRTZXJ2aWNlKFN0cmluZyBjb25maWdQYXRoLCBpbnQgZmQp
+          OworCisgICAgcHVibGljIHN0YXRpYyBuYXRpdmUgYm9vbGVhbiBUUHJveHlTdG9wU2VydmljZSgpOworCisgICAgcHVibGljIHN0
+          YXRpYyBuYXRpdmUgYm9vbGVhbiBUUHJveHlJc1J1bm5pbmcoKTsKKworICAgIHB1YmxpYyBzdGF0aWMgbmF0aXZlIGxvbmdbXSBU
+          UHJveHlHZXRTdGF0cygpOworfQo=
+          B64_EOF
+          git apply --whitespace=nowarn /tmp/phonevpn.diff
+          git status --short
+          sed -i 's/versionName = ".*"/versionName = "0.3.26"/; s/versionCode = [0-9]*/versionCode = 32600/' mobile/build.gradle.kts
+          grep -n versionName mobile/build.gradle.kts
+
+      - name: Add hev-socks5-tunnel notice
+        run: |
+          printf '\nhev-socks5-tunnel (MIT license), https://github.com/heiher/hev-socks5-tunnel : used to put this device on the VPN. Built from its public source in the GitHub build.\n' >> NOTICE
+          tail -3 NOTICE
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Build Xray-core (unmodified, MPL 2.0)
+        run: |
+          TAG=v26.11.9
+          git clone --depth 1 --branch $TAG https://github.com/XTLS/Xray-core /tmp/xray
+          cd /tmp/xray
+          for spec in arm64-v8a:arm64: armeabi-v7a:arm:7 x86_64:amd64: x86:386:; do
+            abi=${spec%%:*}; rest=${spec#*:}; arch=${rest%%:*}; arm=${rest#*:}
+            mkdir -p $GITHUB_WORKSPACE/mobile/src/main/jniLibs/$abi
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch GOARM=$arm go build -trimpath -ldflags "-s -w -buildid=" -o /tmp/xray-$abi ./main
+            cp /tmp/xray-$abi $GITHUB_WORKSPACE/mobile/src/main/jniLibs/$abi/libxray.so
+          done
+          cp /tmp/xray-x86_64 $GITHUB_WORKSPACE/xray-x86_64
+          cd $GITHUB_WORKSPACE
+          sed -i 's|^    packaging.resources.excludes += listOf(|    packaging.jniLibs.useLegacyPackaging = true\n    packaging.resources.excludes += listOf(|' mobile/build.gradle.kts
+          grep -n "useLegacyPackaging" mobile/build.gradle.kts
+
+      - name: Build hev-socks5-tunnel (MIT) for all four ABIs
+        run: |
+          mkdir -p /tmp/hevb
+          git clone --recursive https://github.com/heiher/hev-socks5-tunnel /tmp/hevb/jni
+          cd /tmp/hevb/jni && git checkout -q d8a32b2 && git submodule update --init --recursive && cd /tmp/hevb
+          $ANDROID_NDK_HOME/ndk-build NDK_PROJECT_PATH=/tmp/hevb APP_BUILD_SCRIPT=/tmp/hevb/jni/Android.mk NDK_APPLICATION_MK=/tmp/hevb/jni/Application.mk -j4
+          for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+            mkdir -p $GITHUB_WORKSPACE/mobile/src/main/jniLibs/$abi
+            cp /tmp/hevb/libs/$abi/libhev-socks5-tunnel.so $GITHUB_WORKSPACE/mobile/src/main/jniLibs/$abi/
+          done
+          ls -l $GITHUB_WORKSPACE/mobile/src/main/jniLibs/*/
+      - name: Set up release signing
+        env:
+          KS_B64: ${{ secrets.ROUTIFY_KEYSTORE_B64 }}
+        run: |
+          test -n "$KS_B64"
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/routify-release.p12"
+          cat > /tmp/sign.py <<'PY_EOF'
+          p='mobile/build.gradle.kts'
+          t=open(p).read()
+          blk = """    signingConfigs {
+                  create("routify") {
+                      val ksPath = System.getenv("ROUTIFY_KEYSTORE_PATH")
+                      if (ksPath != null) {
+                          storeFile = file(ksPath)
+                          storePassword = System.getenv("ROUTIFY_KEY_PASSWORD")
+                          keyAlias = "routify"
+                          keyPassword = System.getenv("ROUTIFY_KEY_PASSWORD")
+                          enableV1Signing = true
+                          enableV2Signing = true
+                          enableV3Signing = true
+                      }
+                  }
+              }
+          """
+          if 'create("routify")' not in t:
+              t=t.replace("    buildTypes {", blk+"    buildTypes {",1)
+              t=t.replace('signingConfig = signingConfigs.getByName("debug")','signingConfig = if (System.getenv("ROUTIFY_KEYSTORE_PATH") != null) signingConfigs.getByName("routify") else signingConfigs.getByName("debug")')
+          open(p,'w').write(t)
+          PY_EOF
+          python3 /tmp/sign.py
+          grep -n 'routify' mobile/build.gradle.kts | head
+      - name: Build release APKs
+        env:
+          ROUTIFY_KEYSTORE_PATH: ${{ runner.temp }}/routify-release.p12
+          ROUTIFY_KEY_PASSWORD: ${{ secrets.ROUTIFY_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon --stacktrace -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g"
+
+      - name: Pick x86_64 APK
+        run: |
+          ls -l mobile/build/outputs/apk/release/
+          cp mobile/build/outputs/apk/release/*x86_64*.apk /tmp/test-x86_64.apk
+          echo "APKSIZE=$(du -h /tmp/test-x86_64.apk | cut -f1)"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Write test script and local test server
+        run: |
+          cat > test.py <<'PY_EOF'
+          import subprocess,re,time,os,json,html,socket
+          os.makedirs('smoke',exist_ok=True)
+          R=[]
+          def sh(c,t=90):
+              p=subprocess.run(c,shell=True,capture_output=True,text=True,timeout=t); return (p.stdout+p.stderr)
+          def adb(c,t=90): return sh('adb '+c,t)
+          def log(s): R.append(s); print(s,flush=True)
+          def shot(n):
+              with open(f'smoke/{n}.png','wb') as f: f.write(subprocess.run('adb exec-out screencap -p',shell=True,capture_output=True).stdout)
+          import xml.etree.ElementTree as ET
+          def nodes():
+              adb('shell uiautomator dump /sdcard/u.xml'); adb('pull /sdcard/u.xml smoke/ui.xml')
+              out=[]
+              for n in ET.parse('smoke/ui.xml').iter('node'):
+                  m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.get('bounds',''))
+                  if m:
+                      a=list(map(int,m.groups())); out.append((n.get('text',''),n.get('content-desc',''),((a[0]+a[2])//2,(a[1]+a[3])//2)))
+              os.remove('smoke/ui.xml'); return out
+          def texts(): return [t for t,d,x in nodes() if t]
+          def tap(l,tries=1):
+              for i in range(tries):
+                  for t,d,xy in nodes():
+                      if t==l or d==l:
+                          adb(f'shell input tap {xy[0]} {xy[1]}'); time.sleep(2.5); return True
+                  time.sleep(2)
+              log('NOT FOUND: '+l); return False
+          SZ=re.search(r'(\d+)x(\d+)',adb('shell wm size')); W,H=int(SZ.group(1)),int(SZ.group(2))
+          def nav(i): adb(f'shell input tap {int(W*(0.125+0.25*i))} {int(H*0.885)}'); time.sleep(3)
+          LINK='vless://11111111-2222-3333-4444-555555555555@10.0.2.2:10443?security=none&type=tcp#test'
+          def seed(phone):
+              adb('shell am force-stop app.routify'); adb('root'); time.sleep(3)
+              adb('shell mkdir -p /data/data/app.routify/shared_prefs')
+              px='<?xml version="1.0" encoding="utf-8" standalone="yes" ?><map><string name="log_level">info</string><string name="mode">proxy</string><boolean name="phone_vpn" value="%s" /><int name="selected" value="0" /><string name="links">%s</string></map>'%('true' if phone else 'false',html.escape(json.dumps([LINK]),quote=False))
+              open('p.xml','w').write(px); adb('push p.xml /data/data/app.routify/shared_prefs/routify_xray.xml'); os.remove('p.xml')
+              uid=adb('shell stat -c %u /data/data/app.routify').strip()
+              adb('shell chown -R '+uid+':'+uid+' /data/data/app.routify/shared_prefs'); adb('shell restorecon -R /data/data/app.routify/shared_prefs')
+              adb('shell rm -rf /data/data/app.routify/app_xray'); adb('unroot'); time.sleep(3); adb('wait-for-device')
+          def start_app():
+              adb('shell monkey -p app.routify -c android.intent.category.LAUNCHER 1'); time.sleep(8); nav(2); time.sleep(2)
+          def srvlog(): return open('server-access.log').read() if os.path.exists('server-access.log') else ''
+          def nc_http(host,port=80,extra=''):
+              return adb(f'shell "printf \'GET / HTTP/1.0\\r\\nHost: {host}\\r\\n\\r\\n\' | toybox nc -w 8 {host} {port} | head -3"',30)
+          def tun(): return adb('shell ip addr show tun0').strip()
+          def stage(name): log('--- '+name)
+
+          adb('logcat -c')
+          # ===== A: device-too mode =====
+          stage('A: mode = device and devices')
+          adb('shell monkey -p app.routify -c android.intent.category.LAUNCHER 1'); time.sleep(6)
+          seed(True); start_app(); shot('01-vpn-tab-before')
+          log('tun0 before Connect: '+repr(tun()[:60]))
+          tap('Connect'); time.sleep(4); shot('02-consent-dialog')
+          log('screen after Connect: '+', '.join(texts()[:12]))
+          ok=tap('OK'); time.sleep(8); shot('03-connected')
+          log('screen connected: '+', '.join(texts()[:14]))
+          t=tun(); log('tun0 up: '+str('198.18.0.1' in t)+' | '+t.replace('\n',' ')[:200])
+          log('vpn in connectivity: '+adb('shell dumpsys connectivity | grep -c "VPN"').strip())
+          log('ip rules: '+adb('shell ip rule').replace('\n',' || ')[:1500])
+          ip=socket.gethostbyname('example.com')
+          before=len(srvlog())
+          r1=nc_http('example.com'); log('GET example.com by name via VPN: '+r1.strip().replace('\n',' | ')[:200])
+          r2=nc_http(ip); log('GET by IP via VPN: '+r2.strip().replace('\n',' | ')[:200])
+          time.sleep(2)
+          new=srvlog()[before:]
+          log('server saw domain example.com: '+str('example.com' in new)+'; saw IP '+ip+': '+str(ip in new))
+          log('ping name resolves to mapdns range: '+adb('shell ping -c1 -W2 example.org').strip().split('\n')[0])
+          p=nc_http('example.com',8080) if False else adb('shell "printf \'GET http://example.com/ HTTP/1.0\\r\\n\\r\\n\' | toybox nc -w 8 127.0.0.1 8080 | head -2"',30)
+          log('hotspot HTTP proxy 8080 while VPN on: '+p.strip().replace('\n',' | ')[:200])
+          log('port 1080 listening: '+adb('shell "cat /proc/net/tcp6 /proc/net/tcp | grep -ci :0438"').strip())
+          # root caveat
+          stage('root engine caveat')
+          adb('root'); time.sleep(3); adb('wait-for-device'); adb('push xray-x86_64 /data/local/tmp/xray'); adb('shell chmod 755 /data/local/tmp/xray')
+          cfg={"log":{"loglevel":"warning"},"inbounds":[{"port":1099,"listen":"127.0.0.1","protocol":"socks","settings":{"udp":True}}],"outbounds":[{"protocol":"vless","settings":{"vnext":[{"address":"10.0.2.2","port":10443,"users":[{"id":"11111111-2222-3333-4444-555555555555","encryption":"none"}]}]},"streamSettings":{"network":"tcp","security":"none","sockopt":{"mark":0x1000000}}}]}
+          open('rootcfg.json','w').write(json.dumps(cfg)); adb('push rootcfg.json /data/local/tmp/rootcfg.json')
+          adb('shell "nohup /data/local/tmp/xray run -c /data/local/tmp/rootcfg.json >/data/local/tmp/rx.log 2>&1 &"',20)
+          time.sleep(3)
+          log('root-run marked xray listening: '+adb('shell "cat /proc/net/tcp | grep -ci :044B"').strip()+' ; '+adb('shell id').strip())
+          log('ip rule + route for uid 0 mark: '+adb('shell ip route get 10.0.2.2 uid 0').strip()[:200])
+          log('route get 1.1.1.1 uid 0: '+adb('shell ip route get 1.1.1.1 uid 0').strip()[:200])
+          log('route get 1.1.1.1 uid 0 mark 0x1000000: '+adb('shell ip route get 1.1.1.1 uid 0 mark 0x1000000').strip()[:200])
+          adb('shell pkill -f data/local/tmp/xray'); adb('unroot'); time.sleep(3); adb('wait-for-device')
+          # disconnect
+          stage('Disconnect')
+          adb('shell monkey -p app.routify -c android.intent.category.LAUNCHER 1'); time.sleep(3); nav(2)
+          tap('Disconnect'); time.sleep(5); shot('04-disconnected')
+          log('screen after Disconnect: '+', '.join(texts()[:12]))
+          log('tun0 after Disconnect: '+repr(tun()[:60]))
+          before=len(srvlog())
+          r3=nc_http('example.com'); log('GET example.com after Disconnect (direct): '+r3.strip().replace('\n',' | ')[:200])
+          log('server log grew after Disconnect: '+str(len(srvlog())>before))
+          log('proxy ports after Disconnect: '+adb('shell "cat /proc/net/tcp6 /proc/net/tcp | grep -ci :1F90"').strip())
+          # ===== B: devices only =====
+          stage('B: mode = devices only (default)')
+          seed(False); start_app(); tap('Connect'); time.sleep(8); shot('05-devices-only-connected')
+          log('screen: '+', '.join(texts()[:12]))
+          log('tun0 in devices-only mode: '+repr(tun()[:60]))
+          log('proxy answers: '+adb('shell "printf \'GET http://example.com/ HTTP/1.0\\r\\n\\r\\n\' | toybox nc -w 8 127.0.0.1 8080 | head -2"',30).strip().replace('\n',' | ')[:200])
+          tap('Disconnect'); time.sleep(3)
+          # ===== C: settings screen =====
+          stage('C: settings option')
+          nav(3); time.sleep(2)
+          for i in range(4):
+              nodes_=texts()
+              if 'What Connect covers' in nodes_: break
+              adb(f'shell input swipe {W//2} {int(H*0.8)} {W//2} {int(H*0.3)} 400'); time.sleep(1)
+          shot('06-settings-row'); log('settings row visible: '+str('What Connect covers' in texts()))
+          if tap('What Connect covers'):
+              shot('07-settings-dialog'); log('dialog: '+', '.join(texts()[:8]))
+          # ===== D: consent denied =====
+          stage('D: consent denied')
+          seed(True); adb('shell appops set app.routify ACTIVATE_VPN deny' if False else 'shell true'); start_app(); tap('Connect'); time.sleep(4)
+          tap('Cancel'); time.sleep(4); shot('08-consent-denied')
+          log('screen after Cancel: '+', '.join(texts()[:14]))
+          log('tun0 after denied: '+repr(tun()[:60])+' ; proxy answers: '+adb('shell "printf \'GET http://example.com/ HTTP/1.0\\r\\n\\r\\n\' | toybox nc -w 8 127.0.0.1 8080 | head -1"',30).strip())
+          fatal=sh("adb logcat -d | grep -E 'FATAL EXCEPTION|AndroidRuntime.*app.routify|UnsatisfiedLink' | head -5").strip()
+          log('crash/fatal in logcat: '+(fatal or 'none'))
+          open('smoke/logcat-app.txt','w').write(sh("adb logcat -d | grep -iE 'routify|hev|PhoneVpn' | tail -80"))
+          open('smoke/report.txt','w').write('\n'.join(R))
+
+          PY_EOF
+          cat > server.json <<'JS_EOF'
+          {"log":{"loglevel":"warning","access":"/home/runner/work/server-access.log"},"inbounds":[{"port":10443,"listen":"0.0.0.0","protocol":"vless","settings":{"clients":[{"id":"11111111-2222-3333-4444-555555555555"}],"decryption":"none"}}],"outbounds":[{"protocol":"freedom"}]}
+          JS_EOF
+          sed -i 's|/home/runner/work/server-access.log|'"$PWD"'/server-access.log|' server.json
+          cat > run.sh <<'SH_EOF'
+          set -x
+          ./xray-x86_64 run -c server.json > server.out 2>&1 &
+          sleep 2
+          adb install -r /tmp/test-x86_64.apk 2>&1 | tee smoke/install.txt
+          python3 test.py
+          SH_EOF
+          mkdir -p smoke
+
+      - name: Run on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          disable-animations: true
+          script: bash run.sh
+
+      - name: Upload test output (not committed)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-output
+          path: |
+            smoke
+            server-access.log
+            server.out
+          retention-days: 3

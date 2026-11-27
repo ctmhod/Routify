@@ -1,0 +1,83 @@
+name: Install test v0.3.24
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Download APKs from the releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.3.23 --repo ctmhod/Routify --pattern '*x86_64.apk' --dir a23
+          gh release download v0.3.24 --repo ctmhod/Routify --pattern '*x86_64.apk' --dir a24
+          ls -l a23 a24
+          echo "A23=$(ls a23/*.apk | head -1)" >> $GITHUB_ENV
+          echo "A24=$(ls a24/*.apk | head -1)" >> $GITHUB_ENV
+          AAPT=$(ls $ANDROID_HOME/build-tools/*/aapt | tail -1)
+          mkdir -p out
+          for f in a23/*.apk a24/*.apk; do echo "== $f"; $AAPT dump xmltree $f AndroidManifest.xml | grep -A3 "E: provider" | grep -E "authorities|name"; done | tee out/provider-authorities.txt
+      - name: Build a stand-in for the original app (same provider name)
+        run: |
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | tail -1)
+          JAR=$(ls $ANDROID_HOME/platforms/*/android.jar | tail -1)
+          mkdir -p orig && cd orig
+          cat > AndroidManifest.xml <<'XML_EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="be.mygod.vpnhotspot.standin">
+            <application android:label="VPN Hotspot (stand-in)">
+              <provider android:name="androidx.core.content.FileProvider" android:authorities="be.mygod.vpnhotspot.log" android:exported="false" android:grantUriPermissions="true"/>
+            </application>
+          </manifest>
+          XML_EOF
+          $BT/aapt2 link -o orig.apk -I $JAR --manifest AndroidManifest.xml --min-sdk-version 26 --target-sdk-version 34
+          keytool -genkeypair -keystore k.jks -storepass password -keypass password -alias a -keyalg RSA -keysize 2048 -validity 100 -dname CN=t
+          $BT/apksigner sign --ks k.jks --ks-pass pass:password orig.apk
+          ls -l orig.apk
+      - name: Write test script
+        run: |
+          cat > qa.sh <<'SH_EOF'
+          set -x
+          O=out; mkdir -p $O
+          shot(){ adb exec-out screencap -p > $O/$1.png; }
+          adb install orig/orig.apk 2>&1 | tee $O/1-install-original-standin.txt
+          adb shell pm list packages | grep -E "mygod|routify" | tee $O/1-packages.txt
+          adb install $A23 2>&1 | tee $O/2-install-v0.3.23-next-to-original.txt
+          adb install $A24 2>&1 | tee $O/3-install-v0.3.24-next-to-original.txt
+          adb shell pm list packages | grep -E "mygod|routify" | tee $O/3-packages.txt
+          adb shell monkey -p app.routify -c android.intent.category.LAUNCHER 1; sleep 8; shot 3-routify-v0.3.24-running-next-to-original
+          adb shell dumpsys package app.routify | grep -E "versionName|userId|sharedUser|Provider|authority" | head | tee $O/3-dumpsys.txt
+          adb shell pm list permissions -g 2>/dev/null | grep -ci routify | tee $O/3-custom-permissions.txt
+          adb shell ps -A | grep -E "routify|mygod" | tee $O/3-processes.txt
+          adb uninstall be.mygod.vpnhotspot.standin; adb uninstall app.routify
+          adb install $A23 2>&1 | tee $O/4-install-v0.3.23-alone.txt
+          adb install -r $A24 2>&1 | tee $O/4-upgrade-to-v0.3.24.txt
+          adb shell monkey -p app.routify -c android.intent.category.LAUNCHER 1; sleep 8; shot 4-upgraded-launch
+          adb logcat -d | grep -E "FATAL EXCEPTION" | head | tee $O/crash.txt
+          SH_EOF
+      - name: Test on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          disable-animations: true
+          script: bash qa.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: out
+          path: out
+          retention-days: 3

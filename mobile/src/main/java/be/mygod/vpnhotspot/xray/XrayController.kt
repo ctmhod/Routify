@@ -28,6 +28,8 @@ object XrayController {
     const val SOCKS_PORT = 1080
     /** Local SOCKS port of the separate engine this phone uses when root mode is on. */
     const val PHONE_PORT = 1081
+    /** Loopback SOCKS port on the root engine, used only to test that the server passes traffic. */
+    const val CHECK_PORT = 1082
     /** Bit 25: marks UDP that TPROXY hands to Xray (routed to loopback by a policy rule). */
     private const val TMARK = 0x2000000
     private const val UCHAIN = "ROUTIFY_UDP"
@@ -69,7 +71,21 @@ object XrayController {
         get() = prefs.getBoolean("phone_vpn", false)
         set(v) = prefs.edit().putBoolean("phone_vpn", v).apply()
 
+    /** Off (default): when the server passes nothing, hotspot clients keep the normal connection. On: they are blocked until it works. */
+    var blockOnFail: Boolean
+        get() = prefs.getBoolean("block_on_fail", false)
+        set(v) = prefs.edit().putBoolean("block_on_fail", v).apply()
+
+    @Volatile private var waitReason: String = ""
+
     private var phoneProc: java.lang.Process? = null
+
+    /** Last error lines of an Xray log, with ids and links hidden, for the error log. */
+    fun logExcerpt(name: String): String = try {
+        File(dir, name).takeIf { it.exists() }?.readText()?.takeLast(6000)?.lines()
+            ?.filter { "[Error]" in it || "failed" in it.lowercase() }?.takeLast(3)
+            ?.joinToString(" | ") { redact(it.substringAfter("] ", it)).takeLast(260) } ?: ""
+    } catch (_: Throwable) { "" }
 
     /**
      * Engine for this device's own traffic. Proxy mode already has one on SOCKS 1080; in root mode the sharing engine runs
@@ -139,6 +155,8 @@ object XrayController {
                 .put("protocol", "socks").put("settings", JSONObject().put("udp", true).put("auth", "noauth")))
         } else {
             inbounds
+            .put(JSONObject().put("tag", "check-in").put("port", CHECK_PORT).put("listen", "127.0.0.1")
+                .put("protocol", "socks").put("settings", JSONObject().put("udp", false).put("auth", "noauth")))
             .put(JSONObject().put("tag", "tcp-in").put("port", TCP_PORT).put("listen", "0.0.0.0")
                 .put("protocol", "dokodemo-door")
                 .put("settings", JSONObject().put("network", "tcp").put("followRedirect", true))
@@ -277,6 +295,7 @@ object XrayController {
             if (lib == null) { _message.value = "Xray engine missing from this build"; return }
             stopProxyProcess()
             val resolved = withContext(Dispatchers.IO) { pinIfNeeded(resolve(server)) }
+            appendLog("Link: ${server.describe()} | used: TLS name=${resolved.sni.ifEmpty { resolved.wsHost.ifEmpty { resolved.host } }} hostHeader=${resolved.wsHost} address=${resolved.host}")
             withContext(Dispatchers.IO) {
                 File(dir, "config.json").writeText(config(resolved, proxy = true))
                 val pb = ProcessBuilder("/system/bin/sh", "-c",
@@ -344,8 +363,31 @@ object XrayController {
         lastProblem = null
         Thread {
             try {
+                var tick = 0
+                var fails = 0
                 while (_running.value) {
                     Thread.sleep(3000)
+                    tick++
+                    if (tick % 10 == 0 && !blockOnFail) {
+                        val st = try { File(dir, "state").readText().trim() } catch (_: Throwable) { "" }
+                        if (st == "waiting" || st == "running") {
+                            val bad = PhoneVpn.serverCheck(CHECK_PORT)
+                            if (st == "waiting" && bad.isEmpty()) {
+                                kotlinx.coroutines.runBlocking { applyRules(true) }
+                                waitReason = ""; fails = 0
+                                appendLog("Server answers again: other devices are now on the VPN")
+                                refresh()
+                            } else if (st == "running") {
+                                fails = if (bad.isEmpty()) 0 else fails + 1
+                                if (fails >= 2) {
+                                    kotlinx.coroutines.runBlocking { applyRules(false) }
+                                    waitReason = bad; fails = 0
+                                    appendLog("Server stopped answering: $bad. Other devices use the normal connection again. ${logExcerpt("xray.log")}")
+                                    refresh()
+                                }
+                            } else if (bad != waitReason) { waitReason = bad; refresh() }
+                        }
+                    }
                     val log = try { File(dir, "xray.log").takeIf { it.exists() }?.readText()?.takeLast(6000) ?: "" } catch (_: Throwable) { "" }
                     val problem = diagnose(log)
                     if (problem != null && problem != lastProblem) {
@@ -414,6 +456,7 @@ object XrayController {
         if (lib == null) { _message.value = "Xray engine missing from this build"; return }
         if (ifaces.isEmpty()) { _message.value = "Start the hotspot first"; return }
         val resolved = withContext(Dispatchers.IO) { pinIfNeeded(resolve(server)) }
+        appendLog("Link: ${server.describe()} | used: TLS name=${resolved.sni.ifEmpty { resolved.wsHost.ifEmpty { resolved.host } }} hostHeader=${resolved.wsHost} address=${resolved.host}")
         val cfg = android.util.Base64.encodeToString(config(resolved).toByteArray(), android.util.Base64.NO_WRAP)
         val d = dir.absolutePath
         val rules = ifaces.joinToString("\n") { i ->
@@ -426,9 +469,18 @@ object XrayController {
         }
         val udpDirect = directMacs().filter { Regex("^[0-9a-f:]{17}$").matches(it) }
             .joinToString("\n") { "iptables -w -t mangle -A $UCHAIN -m mac --mac-source $it -j RETURN" }
+        val unapply = """
+            iptables -w -t nat -S PREROUTING 2>/dev/null | grep -E -- "-j $CHAIN" | sed 's/^-A/iptables -w -t nat -D/' | while read -r l; do sh -c "${'$'}l"; done
+            iptables -w -t mangle -S PREROUTING 2>/dev/null | grep -E -- "-j $UCHAIN" | sed 's/^-A/iptables -w -t mangle -D/' | while read -r l; do sh -c "${'$'}l"; done
+        """.trimIndent()
+        val applyText = unapply + "\n" + rules + "\nif [ \"\$(cat $d/udp 2>/dev/null)\" = yes ]; then\n" + udpJumps + "\nfi\necho running > $d/state\n"
+        val unapplyText = unapply + "\necho waiting > $d/state\n"
+        fun b64(t: String) = android.util.Base64.encodeToString(t.toByteArray(), android.util.Base64.NO_WRAP)
         val script = """
             umask 022
             ${stopScript(d)}
+            echo ${quote(b64(applyText))} | base64 -d > $d/apply.sh
+            echo ${quote(b64(unapplyText))} | base64 -d > $d/unapply.sh
             echo ${quote(cfg)} | base64 -d > $d/config.json
             cd $d
             S=${'$'}(command -v setsid || true)
@@ -449,7 +501,7 @@ object XrayController {
               iptables -w -t nat -A $CHAIN -d ${'$'}n -j RETURN
             done
             iptables -w -t nat -A $CHAIN -p tcp -j REDIRECT --to-ports $TCP_PORT
-            $rules
+            # The redirect rules are added by apply.sh only after the server has passed a test (see below).
             # UDP (games, calls, QUIC) through TPROXY. Needs kernel support; if missing, UDP stays direct as before.
             echo no > $d/udp
             if iptables -w -t mangle -N $UCHAIN 2>/dev/null; then
@@ -462,18 +514,38 @@ object XrayController {
               if iptables -w -t mangle -A $UCHAIN -p udp -j TPROXY --on-port $UDP_PORT --tproxy-mark $TMARK/$TMARK 2>/dev/null; then
                 ip rule add fwmark $TMARK/$TMARK lookup 200 pref 90 2>/dev/null
                 ip route add local 0.0.0.0/0 dev lo table 200 2>/dev/null
-                $udpJumps
                 echo yes > $d/udp
               else
                 iptables -w -t mangle -F $UCHAIN; iptables -w -t mangle -X $UCHAIN
               fi
             fi
-            echo running > $d/state
+            echo waiting > $d/state
             chmod -R a+rX $d
         """.trimIndent()
         _message.value = "Starting..."
         RootManager.use { it.execute(RunShell(script)) }
+        waitReason = ""
+        if (File(dir, "state").readText().trim() == "waiting") {
+            val bad = if (blockOnFail) "" else withContext(Dispatchers.IO) { checkServer() }
+            if (bad.isEmpty()) applyRules(true)
+            else {
+                waitReason = bad
+                appendLog("Server test failed: $bad. Not redirecting other devices. ${logExcerpt("xray.log")}")
+            }
+        }
         refresh()
+    }
+
+    /** Test through the root engine; retries once when the engine was not listening yet. */
+    private fun checkServer(): String {
+        var bad = PhoneVpn.serverCheck(CHECK_PORT)
+        if (bad.startsWith("test connection failed")) { Thread.sleep(1500); bad = PhoneVpn.serverCheck(CHECK_PORT) }
+        return bad
+    }
+
+    private suspend fun applyRules(on: Boolean) {
+        val f = if (on) "apply.sh" else "unapply.sh"
+        RootManager.use { it.execute(RunShell("sh ${dir.absolutePath}/$f")) }
     }
 
     suspend fun stop() {
@@ -481,7 +553,7 @@ object XrayController {
         stopPhoneEngine()
         val st = File(dir, "state").takeIf { it.exists() }?.readText()?.trim()
         // A leftover root session (state "running") must always be cleaned up with the root script, whatever the mode says now.
-        if (proxyProc != null || st == "proxy" || (useProxy() && st != "running")) {
+        if (proxyProc != null || st == "proxy" || (useProxy() && st != "running" && st != "waiting")) {
             stopProxyProcess()
             _running.value = false
             _message.value = "Stopped"
@@ -531,15 +603,16 @@ object XrayController {
             }
             state = "stopped"
         }
-        if (state == "running") {
+        if (state == "running" || state == "waiting") {
             // After a reboot the state file stays behind (Xray and the iptables rules are gone). /proc is hidden from apps.
             val bootTime = System.currentTimeMillis() - android.os.SystemClock.elapsedRealtime()
             if (File(dir, "state").lastModified() < bootTime) state = "stopped"
         }
-        _running.value = state == "running"
-        if (state == "running") startWatcher()
+        _running.value = state == "running" || state == "waiting"
+        if (_running.value) startWatcher()
         val prob = lastProblem
         _message.value = when (state) {
+            "waiting" -> "Server not answering" + (if (waitReason.isNotEmpty()) " ($waitReason)" else "") + ". Sharing is NOT going through the VPN: other devices use the normal connection. Checking again every 30 seconds."
             "running" -> if (prob != null) "Connected, but " + prob else if (File(dir, "udp").takeIf { it.exists() }?.readText()?.trim() == "yes") "Connected (TCP, DNS and UDP)"
                 else "Connected (TCP and DNS; this phone's kernel has no UDP proxy support)"
             "failed" -> "Failed to start. " + redact(File(dir, "xray.log").takeIf { it.exists() }?.readText()?.takeLast(300) ?: "")

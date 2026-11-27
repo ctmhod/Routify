@@ -100,8 +100,8 @@ fun VpnScreen(hotspotIfaces: Collection<String>) {
                                             val bad = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { PhoneVpn.serverCheck(port) }
                                             if (bad.isNotEmpty()) {
                                                 XrayController.stopPhoneEngine()
-                                                XrayController.appendLog("Phone VPN not started: $bad")
-                                                PhoneVpn.setStatus("This device was NOT put on the VPN, so its internet keeps working: $bad. Check the server and the link. Sharing to other devices may fail too.")
+                                                XrayController.appendLog("Phone VPN not started: $bad. ${XrayController.logExcerpt("phone.log").ifEmpty { XrayController.logExcerpt("xray.log") }}")
+                                                PhoneVpn.setStatus("This device was NOT put on the VPN, so its internet keeps working: $bad. Check the server and the link.")
                                                 return@let
                                             }
                                             pendingPort = port

@@ -32,6 +32,16 @@ object PhoneVpn {
      * server is found before this device is put on the VPN. Returns an empty string when it works, else the reason.
      */
     fun serverCheck(port: Int): String {
+        val a = serverCheckOne(port, byteArrayOf(5, 1, 0, 1, 1, 1, 1, 1, 0, 80), "1.1.1.1")
+        if (a.isEmpty()) return ""
+        // Some servers block one address; a second, different target avoids a false alarm.
+        val host = "connectivitycheck.gstatic.com".toByteArray()
+        val req = byteArrayOf(5, 1, 0, 3, host.size.toByte()) + host + byteArrayOf(0, 80)
+        val b = serverCheckOne(port, req, "connectivitycheck.gstatic.com")
+        return if (b.isEmpty()) "" else a
+    }
+
+    private fun serverCheckOne(port: Int, connectReq: ByteArray, hostHeader: String): String {
         try {
             java.net.Socket().use { s ->
                 s.connect(java.net.InetSocketAddress("127.0.0.1", port), 3000)
@@ -40,12 +50,12 @@ object PhoneVpn {
                 o.write(byteArrayOf(5, 1, 0)); o.flush()
                 val r = ByteArray(2)
                 if (i.read(r) != 2 || r[1].toInt() != 0) return "the local proxy did not answer"
-                o.write(byteArrayOf(5, 1, 0, 1, 1, 1, 1, 1, 0, 80)); o.flush()
+                o.write(connectReq); o.flush()
                 val rep = ByteArray(10)
                 var n = 0
                 while (n < 10) { val k = i.read(rep, n, 10 - n); if (k < 0) return "the server closed the connection"; n += k }
                 if (rep[1].toInt() != 0) return "the server could not reach the internet (code ${rep[1]})"
-                o.write("GET / HTTP/1.0\r\nHost: 1.1.1.1\r\n\r\n".toByteArray()); o.flush()
+                o.write("GET / HTTP/1.0\r\nHost: $hostHeader\r\n\r\n".toByteArray()); o.flush()
                 val b = ByteArray(16)
                 val k = i.read(b)
                 return if (k > 0) "" else "the server did not send any data back"

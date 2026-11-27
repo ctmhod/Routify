@@ -86,6 +86,35 @@ fun VpnCoverageRow() {
 }
 
 @Composable
+fun VpnFailRow() {
+    var block by remember { mutableStateOf(XrayController.blockOnFail) }
+    var edit by remember { mutableStateOf(false) }
+    PreferenceRow(
+        icon = R.drawable.ic_route,
+        title = "If the server stops working",
+        summary = (if (block) "Block other devices until it works" else "Let other devices use the normal connection") + ". Applies next time you connect.",
+        onClick = { edit = true },
+    )
+    if (edit) AlertDialog(
+        onDismissRequest = { edit = false },
+        title = { Text("If the server stops working") },
+        text = {
+            Column {
+                TextButton(onClick = { XrayController.blockOnFail = false; block = false; edit = false }) {
+                    Text(if (!block) "Normal connection (selected)" else "Normal connection")
+                }
+                TextButton(onClick = { XrayController.blockOnFail = true; block = true; edit = false }) {
+                    Text(if (block) "Block until it works (selected)" else "Block until it works")
+                }
+                Text("Normal connection: other devices keep working, but without the VPN, while the server does not answer. Block: they have no internet until the server answers.")
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = { edit = false }) { Text("Cancel") } },
+    )
+}
+
+@Composable
 fun VpnLogRow() {
     var level by remember { mutableStateOf(XrayController.logLevel) }
     var editLevel by remember { mutableStateOf(false) }

@@ -31,6 +31,19 @@ data class XrayServer(
     /** Only xtls-rprx-vision is a real flow, and only over plain TCP. Links that say flow=none must not send it to Xray. */
     private fun flowOk() = flow.startsWith("xtls-rprx-vision") && network == "tcp"
 
+    /** Link settings for the log. Never includes the id. */
+    fun describe(): String = buildString {
+        append("$protocol $network/$security port=$port host=$host")
+        if (sni.isNotEmpty()) append(" sni=$sni")
+        if (wsHost.isNotEmpty()) append(" hostHeader=$wsHost")
+        if (path.isNotEmpty()) append(" path=$path")
+        if (alpn.isNotEmpty()) append(" alpn=$alpn")
+        if (fingerprint.isNotEmpty()) append(" fp=$fingerprint")
+        if (flow.isNotEmpty()) append(" flow=$flow(${if (flowOk()) "sent" else "not sent"})")
+        if (insecure) append(" allowInsecure=1")
+        if (pin.isNotEmpty()) append(" pin=link")
+    }
+
     /** Outbound object for Xray's JSON config. */
     fun outbound(mark: Boolean = true): JSONObject {
         val stream = JSONObject().put("network", network).put("security", security)

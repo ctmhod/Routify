@@ -1,0 +1,236 @@
+name: Release v0.3.27
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager "platforms;android-37.0" "build-tools;37.0.0" "ndk;29.0.14206865"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
+
+      - name: Install Android Rust targets
+        run: rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Apply the phone VPN change
+        run: |
+          base64 -d > /tmp/phonevpn.diff <<'B64_EOF'
+          ZGlmZiAtLWdpdCBhL21vYmlsZS9zcmMvbWFpbi9qYXZhL2JlL215Z29kL3ZwbmhvdHNwb3QveHJheS9YcmF5Q29udHJvbGxlci5r
+          dCBiL21vYmlsZS9zcmMvbWFpbi9qYXZhL2JlL215Z29kL3ZwbmhvdHNwb3QveHJheS9YcmF5Q29udHJvbGxlci5rdAppbmRleCAx
+          MzFhMjdiLi4xOWY4NDI2IDEwMDY0NAotLS0gYS9tb2JpbGUvc3JjL21haW4vamF2YS9iZS9teWdvZC92cG5ob3RzcG90L3hyYXkv
+          WHJheUNvbnRyb2xsZXIua3QKKysrIGIvbW9iaWxlL3NyYy9tYWluL2phdmEvYmUvbXlnb2QvdnBuaG90c3BvdC94cmF5L1hyYXlD
+          b250cm9sbGVyLmt0CkBAIC00MjksNyArNDI5LDcgQEAgb2JqZWN0IFhyYXlDb250cm9sbGVyIHsKICAgICAgICAgICAgIFhSQVlf
+          TE9DQVRJT05fQVNTRVQ9JGQgJHsnJCd9UyBub2h1cCAke3F1b3RlKGxpYil9IHJ1biAtYyAkZC9jb25maWcuanNvbiA+ICRkL3hy
+          YXkubG9nIDI+JjEgJgogICAgICAgICAgICAgZWNobyAkeyckJ30hID4gJGQveHJheS5waWQKICAgICAgICAgICAgIHNsZWVwIDEK
+          LSAgICAgICAgICAgIGlmICEga2lsbCAtMCAkeyckJ30oY2F0ICRkL3hyYXkucGlkKSAyPi9kZXYvbnVsbDsgdGhlbgorICAgICAg
+          ICAgICAgaWYgISBraWxsIC0wICR7JyQnfShjYXQgJGQveHJheS5waWQpIDI+L2Rldi9udWxsICYmICEgZ3JlcCAtcUUgJ2luZnJh
+          L2NvbmZ8RmFpbGVkIHRvIHN0YXJ0JyAkZC94cmF5LmxvZyAyPi9kZXYvbnVsbDsgdGhlbgogICAgICAgICAgICAgICBYUkFZX0xP
+          Q0FUSU9OX0FTU0VUPSRkICR7JyQnfVMgbm9odXAgJHtsaW5rZXIoKX0gJHtxdW90ZShsaWIpfSBydW4gLWMgJGQvY29uZmlnLmpz
+          b24gPj4gJGQveHJheS5sb2cgMj4mMSAmCiAgICAgICAgICAgICAgIGVjaG8gJHsnJCd9ISA+ICRkL3hyYXkucGlkCiAgICAgICAg
+          ICAgICAgIHNsZWVwIDEKZGlmZiAtLWdpdCBhL21vYmlsZS9zcmMvbWFpbi9qYXZhL2JlL215Z29kL3ZwbmhvdHNwb3QveHJheS9Y
+          cmF5TGluay5rdCBiL21vYmlsZS9zcmMvbWFpbi9qYXZhL2JlL215Z29kL3ZwbmhvdHNwb3QveHJheS9YcmF5TGluay5rdAppbmRl
+          eCBiNzcyYjAzLi42ZGU4MDU4IDEwMDY0NAotLS0gYS9tb2JpbGUvc3JjL21haW4vamF2YS9iZS9teWdvZC92cG5ob3RzcG90L3hy
+          YXkvWHJheUxpbmsua3QKKysrIGIvbW9iaWxlL3NyYy9tYWluL2phdmEvYmUvbXlnb2QvdnBuaG90c3BvdC94cmF5L1hyYXlMaW5r
+          Lmt0CkBAIC0yOCw2ICsyOCw5IEBAIGRhdGEgY2xhc3MgWHJheVNlcnZlcigKICAgICB2YWwgaW5zZWN1cmU6IEJvb2xlYW4gPSBm
+          YWxzZSwgLy8gYWxsb3dJbnNlY3VyZT0xIGluIHRoZSBsaW5rIChSb3V0aWZ5IHBpbnMgdGhlIHNlcnZlciBjZXJ0aWZpY2F0ZSBp
+          bnN0ZWFkKQogICAgIHZhbCBwaW46IFN0cmluZyA9ICIiLCAgICAgICAgICAvLyBwY3M9IGluIHRoZSBsaW5rOiBTSEEtMjU2IG9m
+          IHRoZSBzZXJ2ZXIgY2VydGlmaWNhdGUKICkgeworICAgIC8qKiBPbmx5IHh0bHMtcnByeC12aXNpb24gaXMgYSByZWFsIGZsb3cs
+          IGFuZCBvbmx5IG92ZXIgcGxhaW4gVENQLiBMaW5rcyB0aGF0IHNheSBmbG93PW5vbmUgbXVzdCBub3Qgc2VuZCBpdCB0byBYcmF5
+          LiAqLworICAgIHByaXZhdGUgZnVuIGZsb3dPaygpID0gZmxvdy5zdGFydHNXaXRoKCJ4dGxzLXJwcngtdmlzaW9uIikgJiYgbmV0
+          d29yayA9PSAidGNwIgorCiAgICAgLyoqIE91dGJvdW5kIG9iamVjdCBmb3IgWHJheSdzIEpTT04gY29uZmlnLiAqLwogICAgIGZ1
+          biBvdXRib3VuZChtYXJrOiBCb29sZWFuID0gdHJ1ZSk6IEpTT05PYmplY3QgewogICAgICAgICB2YWwgc3RyZWFtID0gSlNPTk9i
+          amVjdCgpLnB1dCgibmV0d29yayIsIG5ldHdvcmspLnB1dCgic2VjdXJpdHkiLCBzZWN1cml0eSkKQEAgLTU5LDcgKzYyLDcgQEAg
+          ZGF0YSBjbGFzcyBYcmF5U2VydmVyKAogICAgICAgICBpZiAobWFyaykgc3RyZWFtLnB1dCgic29ja29wdCIsIEpTT05PYmplY3Qo
+          KS5wdXQoIm1hcmsiLCAweDEwMDAwMDApKQogICAgICAgICB2YWwgc2V0dGluZ3MgPSBpZiAocHJvdG9jb2wgPT0gInZsZXNzIikg
+          SlNPTk9iamVjdCgpLnB1dCgidm5leHQiLCBKU09OQXJyYXkoKS5wdXQoSlNPTk9iamVjdCgpCiAgICAgICAgICAgICAucHV0KCJh
+          ZGRyZXNzIiwgaG9zdCkucHV0KCJwb3J0IiwgcG9ydCkucHV0KCJ1c2VycyIsIEpTT05BcnJheSgpLnB1dChKU09OT2JqZWN0KCkK
+          LSAgICAgICAgICAgICAgICAucHV0KCJpZCIsIGlkKS5wdXQoImVuY3J5cHRpb24iLCAibm9uZSIpLmFwcGx5IHsgaWYgKGZsb3cu
+          aXNOb3RFbXB0eSgpKSBwdXQoImZsb3ciLCBmbG93KSB9KSkpKQorICAgICAgICAgICAgICAgIC5wdXQoImlkIiwgaWQpLnB1dCgi
+          ZW5jcnlwdGlvbiIsICJub25lIikuYXBwbHkgeyBpZiAoZmxvd09rKCkpIHB1dCgiZmxvdyIsIGZsb3cpIH0pKSkpCiAgICAgICAg
+          IGVsc2UgSlNPTk9iamVjdCgpLnB1dCgidm5leHQiLCBKU09OQXJyYXkoKS5wdXQoSlNPTk9iamVjdCgpCiAgICAgICAgICAgICAu
+          cHV0KCJhZGRyZXNzIiwgaG9zdCkucHV0KCJwb3J0IiwgcG9ydCkucHV0KCJ1c2VycyIsIEpTT05BcnJheSgpLnB1dChKU09OT2Jq
+          ZWN0KCkKICAgICAgICAgICAgICAgICAucHV0KCJpZCIsIGlkKS5wdXQoImFsdGVySWQiLCBhbHRlcklkKS5wdXQoInNlY3VyaXR5
+          Iiwgdm1lc3NDaXBoZXIpKSkpKQo=
+          B64_EOF
+          git apply --whitespace=nowarn /tmp/phonevpn.diff
+          git status --short
+          sed -i 's/versionName = ".*"/versionName = "0.3.27"/; s/versionCode = [0-9]*/versionCode = 32700/' mobile/build.gradle.kts
+          grep -n versionName mobile/build.gradle.kts
+
+
+      - name: Commit and push source
+        run: |
+          git add -A
+          git -c user.name="ctmhod" -c user.email="290202009+ctmhod@users.noreply.github.com" commit -q -m "Fix VLESS links that say flow=none, clearer start errors (v0.3.27)"
+          git pull --rebase origin main || true
+          git push origin HEAD:main
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Build Xray-core (unmodified, MPL 2.0)
+        run: |
+          TAG=v26.11.9
+          git clone --depth 1 --branch $TAG https://github.com/XTLS/Xray-core /tmp/xray
+          cd /tmp/xray
+          for spec in arm64-v8a:arm64: armeabi-v7a:arm:7 x86_64:amd64: x86:386:; do
+            abi=${spec%%:*}; rest=${spec#*:}; arch=${rest%%:*}; arm=${rest#*:}
+            mkdir -p $GITHUB_WORKSPACE/mobile/src/main/jniLibs/$abi
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch GOARM=$arm go build -trimpath -ldflags "-s -w -buildid=" -o /tmp/xray-$abi ./main
+            cp /tmp/xray-$abi $GITHUB_WORKSPACE/mobile/src/main/jniLibs/$abi/libxray.so
+          done
+          cp /tmp/xray-x86_64 $GITHUB_WORKSPACE/xray-x86_64
+          cd $GITHUB_WORKSPACE
+          sed -i 's|^    packaging.resources.excludes += listOf(|    packaging.jniLibs.useLegacyPackaging = true\n    packaging.resources.excludes += listOf(|' mobile/build.gradle.kts
+          grep -n "useLegacyPackaging" mobile/build.gradle.kts
+
+      - name: Build hev-socks5-tunnel (MIT) for all four ABIs
+        run: |
+          mkdir -p /tmp/hevb
+          git clone --recursive https://github.com/heiher/hev-socks5-tunnel /tmp/hevb/jni
+          cd /tmp/hevb/jni && git checkout -q d8a32b2 && git submodule update --init --recursive && cd /tmp/hevb
+          $ANDROID_NDK_HOME/ndk-build NDK_PROJECT_PATH=/tmp/hevb APP_BUILD_SCRIPT=/tmp/hevb/jni/Android.mk NDK_APPLICATION_MK=/tmp/hevb/jni/Application.mk -j4
+          for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+            mkdir -p $GITHUB_WORKSPACE/mobile/src/main/jniLibs/$abi
+            cp /tmp/hevb/libs/$abi/libhev-socks5-tunnel.so $GITHUB_WORKSPACE/mobile/src/main/jniLibs/$abi/
+          done
+          ls -l $GITHUB_WORKSPACE/mobile/src/main/jniLibs/*/
+      - name: Set up release signing
+        env:
+          KS_B64: ${{ secrets.ROUTIFY_KEYSTORE_B64 }}
+        run: |
+          test -n "$KS_B64"
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/routify-release.p12"
+          cat > /tmp/sign.py <<'PY_EOF'
+          p='mobile/build.gradle.kts'
+          t=open(p).read()
+          blk = """    signingConfigs {
+                  create("routify") {
+                      val ksPath = System.getenv("ROUTIFY_KEYSTORE_PATH")
+                      if (ksPath != null) {
+                          storeFile = file(ksPath)
+                          storePassword = System.getenv("ROUTIFY_KEY_PASSWORD")
+                          keyAlias = "routify"
+                          keyPassword = System.getenv("ROUTIFY_KEY_PASSWORD")
+                          enableV1Signing = true
+                          enableV2Signing = true
+                          enableV3Signing = true
+                      }
+                  }
+              }
+          """
+          if 'create("routify")' not in t:
+              t=t.replace("    buildTypes {", blk+"    buildTypes {",1)
+              t=t.replace('signingConfig = signingConfigs.getByName("debug")','signingConfig = if (System.getenv("ROUTIFY_KEYSTORE_PATH") != null) signingConfigs.getByName("routify") else signingConfigs.getByName("debug")')
+          open(p,'w').write(t)
+          PY_EOF
+          python3 /tmp/sign.py
+          grep -n 'routify' mobile/build.gradle.kts | head
+      - name: Build release APKs
+        env:
+          ROUTIFY_KEYSTORE_PATH: ${{ runner.temp }}/routify-release.p12
+          ROUTIFY_KEY_PASSWORD: ${{ secrets.ROUTIFY_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon --stacktrace -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g"
+
+      - name: Collect APKs
+        env:
+          ROUTIFY_KEYSTORE_PATH: ${{ runner.temp }}/routify-release.p12
+          ROUTIFY_KEY_PASSWORD: ${{ secrets.ROUTIFY_KEY_PASSWORD }}
+        run: |
+          mkdir out
+          for f in mobile/build/outputs/apk/release/*.apk; do
+            case "$f" in
+              *universal*) cp "$f" out/Routify-v0.3.27-0-universal.apk ;;
+              *arm64-v8a*) cp "$f" out/Routify-v0.3.27-arm64-v8a.apk ;;
+              *armeabi-v7a*) cp "$f" out/Routify-v0.3.27-armeabi-v7a.apk ;;
+              *x86_64*) cp "$f" out/Routify-v0.3.27-x86_64.apk ;;
+              *x86*) cp "$f" out/Routify-v0.3.27-x86.apk ;;
+            esac
+          done
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+          U=out/Routify-v0.3.27-0-universal.apk
+          zip -q -d $U 'lib/x86/*' 'lib/x86_64/*' 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/MANIFEST.MF'
+          $BT/zipalign -p -f 4 $U /tmp/u-aligned.apk
+          $BT/apksigner sign --ks "$ROUTIFY_KEYSTORE_PATH" --ks-pass env:ROUTIFY_KEY_PASSWORD --key-pass env:ROUTIFY_KEY_PASSWORD --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out $U /tmp/u-aligned.apk
+          $BT/apksigner verify --print-certs $U | head -3
+          for f in out/*.apk; do
+            n=$(unzip -p "$f" 'classes*.dex' | grep -ac 'What Connect covers')
+            echo "$f has new setting string: $n"; test "$n" -ge 1
+            unzip -l "$f" | grep -c 'libhev-socks5-tunnel' || true
+          done
+          ls -l out
+          for n in 0-universal arm64-v8a armeabi-v7a x86 x86_64; do test -f out/Routify-v0.3.27-$n.apk; done
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: apk
+          path: out
+
+      - name: Publish v0.3.27
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          A=$(du -h out/Routify-v0.3.27-arm64-v8a.apk | cut -f1)
+          V=$(du -h out/Routify-v0.3.27-armeabi-v7a.apk | cut -f1)
+          X=$(du -h out/Routify-v0.3.27-x86.apk | cut -f1)
+          Y=$(du -h out/Routify-v0.3.27-x86_64.apk | cut -f1)
+          U=$(du -h out/Routify-v0.3.27-0-universal.apk | cut -f1)
+          cat > notes.md <<NOTES
+          Routify v0.3.27
+
+          Which file to download:
+          - Routify-v0.3.27-0-universal.apk ($U): main option. One file with the ARM types (arm64-v8a and armeabi-v7a). Works on almost every phone and tablet. Not for x86 devices.
+          - Routify-v0.3.27-arm64-v8a.apk ($A): smaller, for most modern phones (64-bit ARM).
+          - Routify-v0.3.27-armeabi-v7a.apk ($V): smaller, for older 32-bit ARM phones.
+          - Routify-v0.3.27-x86_64.apk ($Y): 64-bit x86 devices and emulators.
+          - Routify-v0.3.27-x86.apk ($X): 32-bit x86 devices and emulators.
+          Not sure which one? Use the universal file.
+
+          New in this version:
+          - Fix: VLESS links that contain flow=none (or any flow other than xtls-rprx-vision) no longer fail with "flow doesn't support none". Routify now only sends a flow value Xray accepts.
+          - Fix: a real Xray start error is no longer hidden behind a second, misleading "unexpected e_type" message.
+          - Includes everything from v0.3.26 (device-on-VPN option, repeater interface detection).
+          - Needs Android 10 or newer (not the Galaxy Tab A6, which stops at Android 8.1).
+          - If Android says "App not installed", uninstall the older Routify first (for all users), then install this file.
+
+          Known limits (honest):
+          - Tested on an Android 11 emulator; the flow fix is checked with a link that says flow=none. Not tested on a real hotspot.
+          - Putting this device on the VPN while root mode shares to hotspot devices has not been tested end to end.
+          - The device VPN carries TCP, UDP and DNS. IPv6 and local network addresses are not sent through the VPN.
+          - Xray-core v26.11.9 and hev-socks5-tunnel (MIT) are built from public source in the GitHub build. Credit is in NOTICE.
+          - Signed with the permanent Routify key. Later updates install over this one.
+          NOTES
+          sed -i 's/^ *//' notes.md
+          gh release create v0.3.27 out/Routify-v0.3.27-0-universal.apk out/Routify-v0.3.27-arm64-v8a.apk out/Routify-v0.3.27-armeabi-v7a.apk out/Routify-v0.3.27-x86_64.apk out/Routify-v0.3.27-x86.apk --target main --latest --title "Routify v0.3.27" --notes-file notes.md
+          gh release view v0.3.27 --json assets --jq '.assets[] | [.name, .size] | @tsv'

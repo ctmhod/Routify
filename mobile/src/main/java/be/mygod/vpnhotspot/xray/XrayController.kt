@@ -313,6 +313,12 @@ object XrayController {
         if (errs.isEmpty()) return null
         return when {
             "certificate has expired" in errs -> "the server's security certificate has expired. Renew it, use a new link, or (own server only) turn on Settings > Allow untrusted server certificate."
+            "certificate is valid for" in errs -> {
+                val m = Regex("certificate is valid for (.+?),? not ([^\\s\\]]+)").find(errs)
+                if (m != null) "the server's certificate is for \"${m.groupValues[1]}\" but Routify asked for \"${m.groupValues[2]}\". If that name is wrong, check sni= and host= in the link."
+                else "the server's security certificate is not valid for this name."
+            }
+            "unknown authority" in errs -> "the server's certificate is not trusted (self-made or incomplete chain). Use a new link, or (own server only) turn on Settings > Allow untrusted server certificate."
             "x509" in errs -> "the server's security certificate is not valid for this name."
             "no such host" in errs || "lookup" in errs && "fail" in errs -> "the server name could not be found. Check your internet connection and the link."
             "connection refused" in errs -> "the server refused the connection (wrong port, or the server is down)."

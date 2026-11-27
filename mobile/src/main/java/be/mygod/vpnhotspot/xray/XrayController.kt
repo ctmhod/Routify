@@ -208,7 +208,8 @@ object XrayController {
             val resolved = withContext(Dispatchers.IO) { pinIfNeeded(resolve(server)) }
             withContext(Dispatchers.IO) {
                 File(dir, "config.json").writeText(config(resolved, proxy = true))
-                val pb = ProcessBuilder(lib, "run", "-c", File(dir, "config.json").absolutePath)
+                val pb = ProcessBuilder("/system/bin/sh", "-c",
+                    "echo \$\$ > ${quote(File(dir, "proxy.pid").absolutePath)}; exec ${quote(lib)} run -c ${quote(File(dir, "config.json").absolutePath)}")
                     .directory(dir).redirectErrorStream(true).redirectOutput(File(dir, "xray.log"))
                 pb.environment()["XRAY_LOCATION_ASSET"] = dir.absolutePath
                 proxyProc = pb.start()
@@ -280,9 +281,23 @@ object XrayController {
         }.apply { isDaemon = true; name = "routify-xray-watch" }.start()
     }
 
+    private fun proxyPid(): Int? = try {
+        File(dir, "proxy.pid").takeIf { it.exists() }?.readText()?.trim()?.toIntOrNull()
+    } catch (_: Throwable) { null }
+
+    /** True when [pid] is still our Xray (guards against a reused pid). */
+    private fun isOurXray(pid: Int) = try {
+        File("/proc/$pid/cmdline").readText().contains("libxray")
+    } catch (_: Throwable) { false }
+
     private fun stopProxyProcess() {
         try { proxyProc?.destroy() } catch (_: Throwable) { }
         proxyProc = null
+        // An Xray left over from before the app restarted would keep ports 8080 and 1080 busy.
+        try {
+            proxyPid()?.let { if (isOurXray(it)) android.os.Process.killProcess(it) }
+            File(dir, "proxy.pid").delete()
+        } catch (_: Throwable) { }
         try { XrayService.stop() } catch (_: Throwable) { }
     }
 
@@ -385,7 +400,7 @@ object XrayController {
     }
 
     suspend fun stop() {
-        if (proxyProc != null || useProxy()) {
+        if (proxyProc != null || useProxy() || File(dir, "state").takeIf { it.exists() }?.readText()?.trim() == "proxy") {
             stopProxyProcess()
             _running.value = false
             _message.value = "Stopped"
@@ -424,7 +439,16 @@ object XrayController {
             proxyProc = null
         }
         var state = File(dir, "state").takeIf { it.exists() }?.readText()?.trim()
-        if (state == "proxy") state = "stopped"
+        if (state == "proxy") {
+            val pid = proxyPid()
+            if (pid != null && isOurXray(pid)) {
+                _running.value = true
+                _message.value = "Proxy on (HTTP $HTTP_PORT, SOCKS $SOCKS_PORT)"
+                startWatcher()
+                return
+            }
+            state = "stopped"
+        }
         if (state == "running") {
             // After a reboot the state file stays behind (Xray and the iptables rules are gone). /proc is hidden from apps.
             val bootTime = System.currentTimeMillis() - android.os.SystemClock.elapsedRealtime()

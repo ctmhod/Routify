@@ -62,7 +62,6 @@
         android:banner="@mipmap/banner"
         android:hasFragileUserData="true"
         android:icon="@mipmap/ic_launcher"
-        android:localeConfig="@xml/locales_config"
         android:enableOnBackInvokedCallback="true"
         android:supportsRtl="true"
         tools:ignore="GoogleAppIndexingWarning">

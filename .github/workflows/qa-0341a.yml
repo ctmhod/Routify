@@ -1,0 +1,480 @@
+name: QA v0.3.41 reconnect after restart on emulator
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager "platforms;android-37.0" "build-tools;37.0.0" "ndk;29.0.14206865"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
+
+      - name: Install Android Rust targets
+        run: rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Apply the phone VPN change
+        run: |
+          base64 -d > /tmp/phonevpn.diff <<'B64_EOF'
+          ZGlmZiAtLWdpdCBhL21vYmlsZS9zcmMvbWFpbi9BbmRyb2lkTWFuaWZlc3QueG1sIGIvbW9iaWxlL3NyYy9tYWluL0FuZHJvaWRN
+          YW5pZmVzdC54bWwKaW5kZXggNDJmOTAwMy4uNmQxYzM2NyAxMDA2NDQKLS0tIGEvbW9iaWxlL3NyYy9tYWluL0FuZHJvaWRNYW5p
+          ZmVzdC54bWwKKysrIGIvbW9iaWxlL3NyYy9tYWluL0FuZHJvaWRNYW5pZmVzdC54bWwKQEAgLTIyMCw2ICsyMjAsMTUgQEAKICAg
+          ICAgICAgICAgICAgICBhbmRyb2lkOnZhbHVlPSJ0cnVlIiAvPgogICAgICAgICA8L3NlcnZpY2U+CiAKKyAgICAgICAgPHJlY2Vp
+          dmVyCisgICAgICAgICAgICBhbmRyb2lkOm5hbWU9Ii54cmF5LlhyYXlCb290UmVjZWl2ZXIiCisgICAgICAgICAgICBhbmRyb2lk
+          OmV4cG9ydGVkPSJ0cnVlIj4KKyAgICAgICAgICAgIDxpbnRlbnQtZmlsdGVyPgorICAgICAgICAgICAgICAgIDxhY3Rpb24gYW5k
+          cm9pZDpuYW1lPSJhbmRyb2lkLmludGVudC5hY3Rpb24uQk9PVF9DT01QTEVURUQiLz4KKyAgICAgICAgICAgICAgICA8YWN0aW9u
+          IGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5pbnRlbnQuYWN0aW9uLk1ZX1BBQ0tBR0VfUkVQTEFDRUQiIC8+CisgICAgICAgICAgICA8
+          L2ludGVudC1maWx0ZXI+CisgICAgICAgIDwvcmVjZWl2ZXI+CisKICAgICAgICAgPHJlY2VpdmVyCiAgICAgICAgICAgICBhbmRy
+          b2lkOm5hbWU9Ii5Cb290UmVjZWl2ZXIiCiAgICAgICAgICAgICBhbmRyb2lkOmRpcmVjdEJvb3RBd2FyZT0idHJ1ZSIKZGlmZiAt
+          LWdpdCBhL21vYmlsZS9zcmMvbWFpbi9qYXZhL2JlL215Z29kL3ZwbmhvdHNwb3QvdWkvU2V0dGluZ3NTY3JlZW4ua3QgYi9tb2Jp
+          bGUvc3JjL21haW4vamF2YS9iZS9teWdvZC92cG5ob3RzcG90L3VpL1NldHRpbmdzU2NyZWVuLmt0CmluZGV4IDJhYzRlMDIuLjZl
+          YzVkMzIgMTAwNjQ0Ci0tLSBhL21vYmlsZS9zcmMvbWFpbi9qYXZhL2JlL215Z29kL3ZwbmhvdHNwb3QvdWkvU2V0dGluZ3NTY3Jl
+          ZW4ua3QKKysrIGIvbW9iaWxlL3NyYy9tYWluL2phdmEvYmUvbXlnb2QvdnBuaG90c3BvdC91aS9TZXR0aW5nc1NjcmVlbi5rdApA
+          QCAtMTY0LDYgKzE2NCw3IEBAIGZ1biBTZXR0aW5nc1NjcmVlbihzbmFja2Jhckhvc3RTdGF0ZTogU25hY2tiYXJIb3N0U3RhdGUp
+          IHsKIHJvdygicm91dGlmeV92cG5fY292ZXIiKSB7IFZwbkNvdmVyYWdlUm93KCkgfQogcm93KCJyb3V0aWZ5X3Zwbl9mYWlsIikg
+          eyBWcG5GYWlsUm93KCkgfQogICAgICAgICByb3coInJvdXRpZnlfdnBuX2hlYWx0aCIpIHsgVnBuSGVhbHRoUm93KCkgfQorICAg
+          ICAgICByb3coInJvdXRpZnlfdnBuX2Jvb3QiKSB7IFZwbkJvb3RSb3coKSB9CiByb3coInJvdXRpZnlfdnBuX2RucyIpIHsgVnBu
+          RG5zUm93KCkgfQogcm93KCJyb3V0aWZ5X2luc2VjdXJlIikgeyBJbnNlY3VyZVJvdygpIH0KIHJvdygicm91dGlmeV92cG5fbG9n
+          IikgeyBWcG5Mb2dSb3coKSB9CmRpZmYgLS1naXQgYS9tb2JpbGUvc3JjL21haW4vamF2YS9iZS9teWdvZC92cG5ob3RzcG90L3Vp
+          L1ZwblNjcmVlbi5rdCBiL21vYmlsZS9zcmMvbWFpbi9qYXZhL2JlL215Z29kL3ZwbmhvdHNwb3QvdWkvVnBuU2NyZWVuLmt0Cmlu
+          ZGV4IGNiMzU5YTYuLjI1ZmI2YjkgMTAwNjQ0Ci0tLSBhL21vYmlsZS9zcmMvbWFpbi9qYXZhL2JlL215Z29kL3ZwbmhvdHNwb3Qv
+          dWkvVnBuU2NyZWVuLmt0CisrKyBiL21vYmlsZS9zcmMvbWFpbi9qYXZhL2JlL215Z29kL3ZwbmhvdHNwb3QvdWkvVnBuU2NyZWVu
+          Lmt0CkBAIC01MCw2ICs1MCw3IEBAIGZ1biBWcG5TY3JlZW4oaG90c3BvdElmYWNlczogQ29sbGVjdGlvbjxTdHJpbmc+KSB7CiAg
+          ICAgICAgIHRyeSB7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBQaG9uZVZwbi5zZXRTdGF0dXMoIiIpCiAg
+          ICAgICAgICAgICBpZiAocHJveHlNb2RlKSBYcmF5Q29udHJvbGxlci5zdGFydFByb3h5KGl0KSBlbHNlIFhyYXlDb250cm9sbGVy
+          LnN0YXJ0KGl0LCAoaG90c3BvdElmYWNlcyArIFhyYXlDb250cm9sbGVyLmRldGVjdFNoYXJpbmdJZmFjZXMoKSkuZGlzdGluY3Qo
+          KSkKKyAgICAgICAgICAgIGlmIChYcmF5Q29udHJvbGxlci5ydW5uaW5nLnZhbHVlKSBYcmF5Q29udHJvbGxlci53YW50Q29ubmVj
+          dGVkID0gdHJ1ZQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgaWYgKFhyYXlDb250cm9sbGVyLnBob25lVnBu
+          ICYmICF2cG5PaykgUGhvbmVWcG4uc2V0U3RhdHVzKCJUaGlzIGRldmljZSBpcyBub3Qgb24gdGhlIFZQTiAocGVybWlzc2lvbiBu
+          b3QgZ2l2ZW4pLiBTaGFyaW5nIHN0aWxsIHdvcmtzLiIpCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBlbHNl
+          IGlmIChYcmF5Q29udHJvbGxlci5waG9uZVZwbiAmJiBYcmF5Q29udHJvbGxlci5ydW5uaW5nLnZhbHVlKSB7CiAgICAgICAgICAg
+          ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgdmFsIHBvcnQgPSBYcmF5Q29udHJvbGxlci5zdGFydFBob25lRW5naW5lKGl0
+          KQpAQCAtMTMzLDcgKzEzNCw3IEBAIGZ1biBWcG5TY3JlZW4oaG90c3BvdElmYWNlczogQ29sbGVjdGlvbjxTdHJpbmc+KSB7CiAg
+          ICAgICAgICAgICAgICAgICAgIEJ1dHRvbihlbmFibGVkID0gcnVubmluZyB8fCBzZXJ2ZXJzLmdldE9yTnVsbChzZWxlY3RlZCkg
+          IT0gbnVsbCwgb25DbGljayA9IHsKICAgICAgICAgICAgICAgICAgICAgICAgIHNjb3BlLmxhdW5jaCB7CiAgICAgICAgICAgICAg
+          ICAgICAgICAgICAgICAgdHJ5IHsKLSAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgaWYgKHJ1bm5pbmcpIFhyYXlDb250
+          cm9sbGVyLnN0b3AoKQorICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBpZiAocnVubmluZykgeyBYcmF5Q29udHJvbGxl
+          ci53YW50Q29ubmVjdGVkID0gZmFsc2U7IFhyYXlDb250cm9sbGVyLnN0b3AoKSB9CiAgICAgICAgICAgICAgICAgICAgICAgICAg
+          ICAgICAgIGVsc2Ugc2VydmVycy5nZXRPck51bGwoc2VsZWN0ZWQpPy5sZXQgeyBzZXJ2ZXIgLT4KICAgICAgICAgICAgICAgICAg
+          ICAgICAgICAgICAgICAgICAgIC8vIFRoZSBBbmRyb2lkIFZQTiBwZXJtaXNzaW9uIGNvbWVzIGZpcnN0LCBiZWZvcmUgYW55dGhp
+          bmcgaXMgYXBwbGllZCBvciBjb25uZWN0ZWQuCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICB2YWwgYXNrID0g
+          aWYgKFhyYXlDb250cm9sbGVyLnBob25lVnBuKSBQaG9uZVZwbi5jb25zZW50SW50ZW50KGNvbnRleHQpIGVsc2UgbnVsbApkaWZm
+          IC0tZ2l0IGEvbW9iaWxlL3NyYy9tYWluL2phdmEvYmUvbXlnb2QvdnBuaG90c3BvdC91aS9WcG5TZXR0aW5ncy5rdCBiL21vYmls
+          ZS9zcmMvbWFpbi9qYXZhL2JlL215Z29kL3ZwbmhvdHNwb3QvdWkvVnBuU2V0dGluZ3Mua3QKaW5kZXggN2VkZmVmYi4uMGIxZmJk
+          MyAxMDA2NDQKLS0tIGEvbW9iaWxlL3NyYy9tYWluL2phdmEvYmUvbXlnb2QvdnBuaG90c3BvdC91aS9WcG5TZXR0aW5ncy5rdAor
+          KysgYi9tb2JpbGUvc3JjL21haW4vamF2YS9iZS9teWdvZC92cG5ob3RzcG90L3VpL1ZwblNldHRpbmdzLmt0CkBAIC0xNjcsMyAr
+          MTY3LDE1IEBAIGZ1biBWcG5IZWFsdGhSb3coKSB7CiAgICAgICAgIG9uQ2hlY2tlZENoYW5nZSA9IHsgWHJheUNvbnRyb2xsZXIu
+          a2VlcEhlYWx0aHkgPSBpdDsgb24gPSBpdCB9LAogICAgICkKIH0KKworQENvbXBvc2FibGUKK2Z1biBWcG5Cb290Um93KCkgewor
+          ICAgIHZhciBvbiBieSByZW1lbWJlciB7IG11dGFibGVTdGF0ZU9mKFhyYXlDb250cm9sbGVyLnJlY29ubmVjdEFmdGVyUmVzdGFy
+          dCkgfQorICAgIFByZWZlcmVuY2VTd2l0Y2hSb3coCisgICAgICAgIGljb24gPSBSLmRyYXdhYmxlLmljX3JvdXRlLAorICAgICAg
+          ICB0aXRsZSA9ICJSZWNvbm5lY3QgYWZ0ZXIgcmVzdGFydCIsCisgICAgICAgIHN1bW1hcnkgPSAiSWYgdGhlIFZQTiB3YXMgb24g
+          d2hlbiB0aGUgZGV2aWNlIHJlc3RhcnRlZCBvciBSb3V0aWZ5IHdhcyB1cGRhdGVkLCBpdCBjb25uZWN0cyBhZ2FpbiBieSBpdHNl
+          bGYuIElmIEFuZHJvaWQgbmVlZHMgeW91ciBPSyBmb3IgdGhpcyBkZXZpY2UncyBWUE4sIG9wZW4gUm91dGlmeSBvbmNlIGFuZCB0
+          YXAgQ29ubmVjdC4iLAorICAgICAgICBjaGVja2VkID0gb24sCisgICAgICAgIG9uQ2hlY2tlZENoYW5nZSA9IHsgWHJheUNvbnRy
+          b2xsZXIucmVjb25uZWN0QWZ0ZXJSZXN0YXJ0ID0gaXQ7IG9uID0gaXQgfSwKKyAgICApCit9CmRpZmYgLS1naXQgYS9tb2JpbGUv
+          c3JjL21haW4vamF2YS9iZS9teWdvZC92cG5ob3RzcG90L3hyYXkvWHJheUJvb3Qua3QgYi9tb2JpbGUvc3JjL21haW4vamF2YS9i
+          ZS9teWdvZC92cG5ob3RzcG90L3hyYXkvWHJheUJvb3Qua3QKbmV3IGZpbGUgbW9kZSAxMDA2NDQKaW5kZXggMDAwMDAwMC4uNTQ3
+          MTcwYwotLS0gL2Rldi9udWxsCisrKyBiL21vYmlsZS9zcmMvbWFpbi9qYXZhL2JlL215Z29kL3ZwbmhvdHNwb3QveHJheS9YcmF5
+          Qm9vdC5rdApAQCAtMCwwICsxLDkwIEBACitwYWNrYWdlIGJlLm15Z29kLnZwbmhvdHNwb3QueHJheQorCitpbXBvcnQgYW5kcm9p
+          ZC5jb250ZW50LkJyb2FkY2FzdFJlY2VpdmVyCitpbXBvcnQgYW5kcm9pZC5jb250ZW50LkNvbnRleHQKK2ltcG9ydCBhbmRyb2lk
+          LmNvbnRlbnQuSW50ZW50CitpbXBvcnQgYmUubXlnb2QudnBuaG90c3BvdC5BcHAuQ29tcGFuaW9uLmFwcAoraW1wb3J0IGtvdGxp
+          bnguY29yb3V0aW5lcy5Db3JvdXRpbmVTY29wZQoraW1wb3J0IGtvdGxpbnguY29yb3V0aW5lcy5EaXNwYXRjaGVycworaW1wb3J0
+          IGtvdGxpbnguY29yb3V0aW5lcy5TdXBlcnZpc29ySm9iCitpbXBvcnQga290bGlueC5jb3JvdXRpbmVzLmRlbGF5CitpbXBvcnQg
+          a290bGlueC5jb3JvdXRpbmVzLmxhdW5jaAoraW1wb3J0IGtvdGxpbnguY29yb3V0aW5lcy53aXRoQ29udGV4dAorCisvKioKKyAq
+          IEJyaW5ncyB0aGUgVlBOIGJhY2sgYnkgaXRzZWxmIGFmdGVyIHRoZSBkZXZpY2UgcmVzdGFydHMgKG9yIGFmdGVyIFJvdXRpZnkg
+          aXMgdXBkYXRlZCksIHdoZW4gaXQgd2FzIG9uIGJlZm9yZS4KKyAqIFdhaXRzIGZvciB0aGUgbmV0d29yaywgdGhlbiBjb25uZWN0
+          cyB0aGUgc2FtZSB3YXkgdGhlIENvbm5lY3QgYnV0dG9uIGRvZXMuIElmIEFuZHJvaWQgc3RpbGwgbmVlZHMgdGhlIG9uZS10aW1l
+          CisgKiBWUE4gcGVybWlzc2lvbiBmb3IgdGhpcyBkZXZpY2UsIGl0IGNhbm5vdCBhc2sgd2l0aG91dCB0aGUgc2NyZWVuLCBzbyB0
+          aGlzIGRldmljZSBpcyBsZWZ0IG9mZiB0aGUgVlBOIGFuZCBpdCBzYXlzIHNvLgorICovCitvYmplY3QgWHJheUJvb3QgeworICAg
+          IHByaXZhdGUgdmFsIHNjb3BlID0gQ29yb3V0aW5lU2NvcGUoU3VwZXJ2aXNvckpvYigpICsgRGlzcGF0Y2hlcnMuRGVmYXVsdCkK
+          KyAgICBAVm9sYXRpbGUgcHJpdmF0ZSB2YXIgcnVubmluZyA9IGZhbHNlCisKKyAgICAvKiogUnVuIG9uIHRoZSBtYWluIHRocmVh
+          ZCBmcm9tIHRoZSByZWNlaXZlci4gKi8KKyAgICBmdW4gYmVnaW4ocmVhc29uOiBTdHJpbmcpIHsKKyAgICAgICAgaWYgKCFYcmF5
+          Q29udHJvbGxlci5yZWNvbm5lY3RBZnRlclJlc3RhcnQgfHwgIVhyYXlDb250cm9sbGVyLndhbnRDb25uZWN0ZWQpIHJldHVybgor
+          ICAgICAgICBpZiAoWHJheUNvbnRyb2xsZXIucnVubmluZy52YWx1ZSB8fCBydW5uaW5nKSByZXR1cm4KKyAgICAgICAgcnVubmlu
+          ZyA9IHRydWUKKyAgICAgICAgLy8gQSBmb3JlZ3JvdW5kIHNlcnZpY2Uga2VlcHMgdGhlIHByb2Nlc3MgYWxpdmUgd2hpbGUgdGhl
+          IG5ldHdvcmsgY29tZXMgdXAgYW5kIFhyYXkgc3RhcnRzLgorICAgICAgICB0cnkgeyBYcmF5U2VydmljZS5zdGFydCgpIH0gY2F0
+          Y2ggKGU6IFRocm93YWJsZSkgeyBYcmF5Q29udHJvbGxlci5hcHBlbmRMb2coIkJvb3Q6IGJhY2tncm91bmQgbm90aWZpY2F0aW9u
+          OiAke2UuamF2YUNsYXNzLnNpbXBsZU5hbWV9IikgfQorICAgICAgICBYcmF5Q29udHJvbGxlci5hcHBlbmRMb2coIkJvb3Q6IFZQ
+          TiB3YXMgb24gYmVmb3JlICgkcmVhc29uKSwgcmVjb25uZWN0aW5nIikKKyAgICAgICAgc2NvcGUubGF1bmNoIHsKKyAgICAgICAg
+          ICAgIHRyeSB7IHJlY29ubmVjdCgpIH0gY2F0Y2ggKGU6IGtvdGxpbnguY29yb3V0aW5lcy5DYW5jZWxsYXRpb25FeGNlcHRpb24p
+          IHsgdGhyb3cgZSB9IGNhdGNoIChlOiBUaHJvd2FibGUpIHsKKyAgICAgICAgICAgICAgICBYcmF5Q29udHJvbGxlci5hcHBlbmRM
+          b2coIkJvb3Q6IHJlY29ubmVjdCBmYWlsZWQ6ICR7ZS5qYXZhQ2xhc3Muc2ltcGxlTmFtZX0iKQorICAgICAgICAgICAgfSBmaW5h
+          bGx5IHsKKyAgICAgICAgICAgICAgICBydW5uaW5nID0gZmFsc2UKKyAgICAgICAgICAgICAgICBpZiAoIVhyYXlDb250cm9sbGVy
+          LnJ1bm5pbmcudmFsdWUpIHRyeSB7IFhyYXlTZXJ2aWNlLnN0b3AoKSB9IGNhdGNoIChfOiBUaHJvd2FibGUpIHsgfQorICAgICAg
+          ICAgICAgfQorICAgICAgICB9CisgICAgfQorCisgICAgcHJpdmF0ZSBzdXNwZW5kIGZ1biB3YWl0Rm9yKHNlY29uZHM6IEludCwg
+          d2hhdDogU3RyaW5nLCBvazogKCkgLT4gQm9vbGVhbik6IEJvb2xlYW4geworICAgICAgICBmb3IgKGkgaW4gMCB1bnRpbCBzZWNv
+          bmRzIC8gMykgeyBpZiAob2soKSkgcmV0dXJuIHRydWU7IGRlbGF5KDMwMDApIH0KKyAgICAgICAgWHJheUNvbnRyb2xsZXIuYXBw
+          ZW5kTG9nKCJCb290OiBnYXZlIHVwIHdhaXRpbmcgZm9yICR3aGF0IikKKyAgICAgICAgcmV0dXJuIG9rKCkKKyAgICB9CisKKyAg
+          ICBwcml2YXRlIHN1c3BlbmQgZnVuIHJlY29ubmVjdCgpIHsKKyAgICAgICAgdmFsIHNlcnZlciA9IFhyYXlDb250cm9sbGVyLnNh
+          dmVkU2VydmVycygpLmdldE9yTnVsbChYcmF5Q29udHJvbGxlci5zZWxlY3RlZCkKKyAgICAgICAgaWYgKHNlcnZlciA9PSBudWxs
+          KSB7IFhyYXlDb250cm9sbGVyLmFwcGVuZExvZygiQm9vdDogbm8gc2F2ZWQgc2VydmVyIHRvIGNvbm5lY3QgdG8iKTsgcmV0dXJu
+          IH0KKyAgICAgICAgWHJheUNvbnRyb2xsZXIuZGV0ZWN0Um9vdCgpCisgICAgICAgIHZhbCBwcm94eSA9IFhyYXlDb250cm9sbGVy
+          LnVzZVByb3h5KCkKKyAgICAgICAgd2FpdEZvcigxMjAsICJ0aGUgbmV0d29yayIpIHsgWHJheUNvbnRyb2xsZXIubmV0d29ya0lz
+          VXAoKSB9CisgICAgICAgIGlmICghcHJveHkpIHdhaXRGb3IoOTAsICJ0aGUgaG90c3BvdCIpIHsgWHJheUNvbnRyb2xsZXIuZGV0
+          ZWN0U2hhcmluZ0lmYWNlcygpLmlzTm90RW1wdHkoKSB9CisgICAgICAgIGZvciAoYXR0ZW1wdCBpbiAxLi4zKSB7CisgICAgICAg
+          ICAgICBpZiAoWHJheUNvbnRyb2xsZXIud2FudENvbm5lY3RlZC5ub3QoKSkgcmV0dXJuCisgICAgICAgICAgICBpZiAocHJveHkp
+          IFhyYXlDb250cm9sbGVyLnN0YXJ0UHJveHkoc2VydmVyKSBlbHNlIFhyYXlDb250cm9sbGVyLnN0YXJ0KHNlcnZlciwgWHJheUNv
+          bnRyb2xsZXIuZGV0ZWN0U2hhcmluZ0lmYWNlcygpKQorICAgICAgICAgICAgaWYgKFhyYXlDb250cm9sbGVyLnJ1bm5pbmcudmFs
+          dWUpIGJyZWFrCisgICAgICAgICAgICBYcmF5Q29udHJvbGxlci5hcHBlbmRMb2coIkJvb3Q6IGF0dGVtcHQgJGF0dGVtcHQgZGlk
+          IG5vdCBzdGFydCwgcmV0cnlpbmciKQorICAgICAgICAgICAgZGVsYXkoMjBfMDAwKQorICAgICAgICB9CisgICAgICAgIGlmICgh
+          WHJheUNvbnRyb2xsZXIucnVubmluZy52YWx1ZSkgcmV0dXJuCisgICAgICAgIGlmIChYcmF5Q29udHJvbGxlci5waG9uZVZwbikg
+          eworICAgICAgICAgICAgaWYgKFBob25lVnBuLmNvbnNlbnRJbnRlbnQoYXBwKSAhPSBudWxsKSB7CisgICAgICAgICAgICAgICAg
+          UGhvbmVWcG4uc2V0U3RhdHVzKCJUaGlzIGRldmljZSBpcyBub3Qgb24gdGhlIFZQTjogQW5kcm9pZCBuZWVkcyB5b3VyIE9LIG9u
+          Y2UuIE9wZW4gUm91dGlmeSBhbmQgdGFwIENvbm5lY3QuIFNoYXJpbmcgd29ya3MuIikKKyAgICAgICAgICAgICAgICBYcmF5Q29u
+          dHJvbGxlci5hcHBlbmRMb2coIkJvb3Q6IHBob25lIFZQTiBwZXJtaXNzaW9uIG1pc3NpbmcsIHNraXBwZWQiKQorICAgICAgICAg
+          ICAgICAgIHJldHVybgorICAgICAgICAgICAgfQorICAgICAgICAgICAgdmFsIHBvcnQgPSBYcmF5Q29udHJvbGxlci5zdGFydFBo
+          b25lRW5naW5lKHNlcnZlcikKKyAgICAgICAgICAgIGlmIChwb3J0ID09IG51bGwpIHsgUGhvbmVWcG4uc2V0U3RhdHVzKCJUaGlz
+          IGRldmljZSBpcyBub3Qgb24gdGhlIFZQTiAodGhlIGVuZ2luZSBkaWQgbm90IHN0YXJ0KS4gU2hhcmluZyBzdGlsbCB3b3Jrcy4i
+          KTsgcmV0dXJuIH0KKyAgICAgICAgICAgIHZhbCBiYWQgPSB3aXRoQ29udGV4dChEaXNwYXRjaGVycy5JTykgeyBQaG9uZVZwbi5z
+          ZXJ2ZXJDaGVjayhwb3J0KSB9CisgICAgICAgICAgICBpZiAoYmFkLmlzTm90RW1wdHkoKSkgeworICAgICAgICAgICAgICAgIFhy
+          YXlDb250cm9sbGVyLnN0b3BQaG9uZUVuZ2luZSgpCisgICAgICAgICAgICAgICAgWHJheUNvbnRyb2xsZXIuYXBwZW5kTG9nKCJC
+          b290OiBwaG9uZSBWUE4gbm90IHN0YXJ0ZWQ6ICRiYWQiKQorICAgICAgICAgICAgICAgIFBob25lVnBuLnNldFN0YXR1cygiVGhp
+          cyBkZXZpY2Ugd2FzIE5PVCBwdXQgb24gdGhlIFZQTiwgc28gaXRzIGludGVybmV0IGtlZXBzIHdvcmtpbmc6ICRiYWQuIikKKyAg
+          ICAgICAgICAgICAgICByZXR1cm4KKyAgICAgICAgICAgIH0KKyAgICAgICAgICAgIFBob25lVnBuLmJlZ2luKHBvcnQsICFYcmF5
+          Q29udHJvbGxlci51c2VQcm94eSgpKQorICAgICAgICB9CisgICAgICAgIFhyYXlDb250cm9sbGVyLmFwcGVuZExvZygiQm9vdDog
+          VlBOIGlzIGJhY2sgb24iKQorICAgIH0KK30KKworY2xhc3MgWHJheUJvb3RSZWNlaXZlciA6IEJyb2FkY2FzdFJlY2VpdmVyKCkg
+          eworICAgIG92ZXJyaWRlIGZ1biBvblJlY2VpdmUoY29udGV4dDogQ29udGV4dCwgaW50ZW50OiBJbnRlbnQpIHsKKyAgICAgICAg
+          d2hlbiAoaW50ZW50LmFjdGlvbikgeworICAgICAgICAgICAgSW50ZW50LkFDVElPTl9CT09UX0NPTVBMRVRFRCAtPiBYcmF5Qm9v
+          dC5iZWdpbigicmVzdGFydCIpCisgICAgICAgICAgICBJbnRlbnQuQUNUSU9OX01ZX1BBQ0tBR0VfUkVQTEFDRUQgLT4gWHJheUJv
+          b3QuYmVnaW4oImFwcCB1cGRhdGVkIikKKyAgICAgICAgfQorICAgIH0KK30KZGlmZiAtLWdpdCBhL21vYmlsZS9zcmMvbWFpbi9q
+          YXZhL2JlL215Z29kL3ZwbmhvdHNwb3QveHJheS9YcmF5Q29udHJvbGxlci5rdCBiL21vYmlsZS9zcmMvbWFpbi9qYXZhL2JlL215
+          Z29kL3ZwbmhvdHNwb3QveHJheS9YcmF5Q29udHJvbGxlci5rdAppbmRleCA4NDhiN2E0Li4xMzdkMDJkIDEwMDY0NAotLS0gYS9t
+          b2JpbGUvc3JjL21haW4vamF2YS9iZS9teWdvZC92cG5ob3RzcG90L3hyYXkvWHJheUNvbnRyb2xsZXIua3QKKysrIGIvbW9iaWxl
+          L3NyYy9tYWluL2phdmEvYmUvbXlnb2QvdnBuaG90c3BvdC94cmF5L1hyYXlDb250cm9sbGVyLmt0CkBAIC04MSw2ICs4MSwxOCBA
+          QCBvYmplY3QgWHJheUNvbnRyb2xsZXIgewogICAgICAgICBnZXQoKSA9IHByZWZzLmdldEJvb2xlYW4oImtlZXBfaGVhbHRoeSIs
+          IHRydWUpCiAgICAgICAgIHNldCh2KSA9IHByZWZzLmVkaXQoKS5wdXRCb29sZWFuKCJrZWVwX2hlYWx0aHkiLCB2KS5hcHBseSgp
+          CiAKKyAgICAvKiogT24gKGRlZmF1bHQpOiBpZiB0aGUgVlBOIHdhcyBvbiB3aGVuIHRoZSBkZXZpY2UgcmVzdGFydGVkIG9yIFJv
+          dXRpZnkgd2FzIHVwZGF0ZWQsIGl0IGNvbm5lY3RzIGFnYWluIGJ5IGl0c2VsZi4gKi8KKyAgICB2YXIgcmVjb25uZWN0QWZ0ZXJS
+          ZXN0YXJ0OiBCb29sZWFuCisgICAgICAgIGdldCgpID0gcHJlZnMuZ2V0Qm9vbGVhbigicmVjb25uZWN0X2Jvb3QiLCB0cnVlKQor
+          ICAgICAgICBzZXQodikgPSBwcmVmcy5lZGl0KCkucHV0Qm9vbGVhbigicmVjb25uZWN0X2Jvb3QiLCB2KS5hcHBseSgpCisKKyAg
+          ICAvKiogVHJ1ZSBhZnRlciBDb25uZWN0IHdvcmtlZCwgZmFsc2UgYWZ0ZXIgdGhlIHVzZXIgdGFwcyBEaXNjb25uZWN0LiBEZWNp
+          ZGVzIHdoZXRoZXIgdG8gcmVjb25uZWN0IGFmdGVyIGEgcmVzdGFydC4gKi8KKyAgICB2YXIgd2FudENvbm5lY3RlZDogQm9vbGVh
+          bgorICAgICAgICBnZXQoKSA9IHByZWZzLmdldEJvb2xlYW4oIndhbnRfY29ubmVjdGVkIiwgZmFsc2UpCisgICAgICAgIHNldCh2
+          KSA9IHByZWZzLmVkaXQoKS5wdXRCb29sZWFuKCJ3YW50X2Nvbm5lY3RlZCIsIHYpLmFwcGx5KCkKKworICAgIGZ1biBuZXR3b3Jr
+          SXNVcCgpID0gbmV0d29ya1VwKCkKKwogICAgIEBWb2xhdGlsZSBwcml2YXRlIHZhciBsYXN0U2VydmVyOiBYcmF5U2VydmVyPyA9
+          IG51bGwKICAgICBwcml2YXRlIHZhciB3aWZpTG9jazogYW5kcm9pZC5uZXQud2lmaS5XaWZpTWFuYWdlci5XaWZpTG9jaz8gPSBu
+          dWxsCiAgICAgcHJpdmF0ZSB2YXIgY3B1TG9jazogYW5kcm9pZC5vcy5Qb3dlck1hbmFnZXIuV2FrZUxvY2s/ID0gbnVsbAo=
+          B64_EOF
+          git apply --whitespace=nowarn /tmp/phonevpn.diff
+
+          git status --short
+          sed -i 's/versionName = ".*"/versionName = "0.3.41"/; s/versionCode = [0-9]*/versionCode = 34100/' mobile/build.gradle.kts
+          grep -n versionName mobile/build.gradle.kts
+
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Build Xray-core (unmodified, MPL 2.0)
+        run: |
+          TAG=v26.11.9
+          git clone --depth 1 --branch $TAG https://github.com/XTLS/Xray-core /tmp/xray
+          cd /tmp/xray
+          for spec in arm64-v8a:arm64: armeabi-v7a:arm:7 x86_64:amd64: x86:386:; do
+            abi=${spec%%:*}; rest=${spec#*:}; arch=${rest%%:*}; arm=${rest#*:}
+            mkdir -p $GITHUB_WORKSPACE/mobile/src/main/jniLibs/$abi
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch GOARM=$arm go build -trimpath -ldflags "-s -w -buildid=" -o /tmp/xray-$abi ./main
+            cp /tmp/xray-$abi $GITHUB_WORKSPACE/mobile/src/main/jniLibs/$abi/libxray.so
+          done
+          cp /tmp/xray-x86_64 $GITHUB_WORKSPACE/xray-x86_64
+          cd $GITHUB_WORKSPACE
+          sed -i 's|^    packaging.resources.excludes += listOf(|    packaging.jniLibs.useLegacyPackaging = true\n    packaging.resources.excludes += listOf(|' mobile/build.gradle.kts
+          grep -n "useLegacyPackaging" mobile/build.gradle.kts
+
+      - name: Build hev-socks5-tunnel (MIT) for all four ABIs
+        run: |
+          mkdir -p /tmp/hevb
+          git clone --recursive https://github.com/heiher/hev-socks5-tunnel /tmp/hevb/jni
+          cd /tmp/hevb/jni && git checkout -q d8a32b2 && git submodule update --init --recursive && cd /tmp/hevb
+          $ANDROID_NDK_HOME/ndk-build NDK_PROJECT_PATH=/tmp/hevb APP_BUILD_SCRIPT=/tmp/hevb/jni/Android.mk NDK_APPLICATION_MK=/tmp/hevb/jni/Application.mk -j4
+          for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+            mkdir -p $GITHUB_WORKSPACE/mobile/src/main/jniLibs/$abi
+            cp /tmp/hevb/libs/$abi/libhev-socks5-tunnel.so $GITHUB_WORKSPACE/mobile/src/main/jniLibs/$abi/
+          done
+          ls -l $GITHUB_WORKSPACE/mobile/src/main/jniLibs/*/
+      - name: Set up release signing
+        env:
+          KS_B64: ${{ secrets.ROUTIFY_KEYSTORE_B64 }}
+        run: |
+          test -n "$KS_B64"
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/routify-release.p12"
+          cat > /tmp/sign.py <<'PY_EOF'
+          p='mobile/build.gradle.kts'
+          t=open(p).read()
+          blk = """    signingConfigs {
+                  create("routify") {
+                      val ksPath = System.getenv("ROUTIFY_KEYSTORE_PATH")
+                      if (ksPath != null) {
+                          storeFile = file(ksPath)
+                          storePassword = System.getenv("ROUTIFY_KEY_PASSWORD")
+                          keyAlias = "routify"
+                          keyPassword = System.getenv("ROUTIFY_KEY_PASSWORD")
+                          enableV1Signing = true
+                          enableV2Signing = true
+                          enableV3Signing = true
+                      }
+                  }
+              }
+          """
+          if 'create("routify")' not in t:
+              t=t.replace("    buildTypes {", blk+"    buildTypes {",1)
+              t=t.replace('signingConfig = signingConfigs.getByName("debug")','signingConfig = if (System.getenv("ROUTIFY_KEYSTORE_PATH") != null) signingConfigs.getByName("routify") else signingConfigs.getByName("debug")')
+          open(p,'w').write(t)
+          PY_EOF
+          python3 /tmp/sign.py
+          grep -n 'routify' mobile/build.gradle.kts | head
+      - name: Build release APKs
+        env:
+          ROUTIFY_KEYSTORE_PATH: ${{ runner.temp }}/routify-release.p12
+          ROUTIFY_KEY_PASSWORD: ${{ secrets.ROUTIFY_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon --stacktrace -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g"
+
+      - name: Pick x86_64 APK
+        run: |
+          cp mobile/build/outputs/apk/release/*x86_64*.apk /tmp/test-x86_64.apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install Pillow
+        run: pip install pillow
+
+      - name: Write test script and local test server
+        run: |
+          cat > test.py <<'PY_EOF'
+          import subprocess,re,time,os,json,html,socket
+          os.makedirs('smoke',exist_ok=True)
+          R=[]
+          def sh(c,t=90):
+              p=subprocess.run(c,shell=True,capture_output=True,text=True,timeout=t); return (p.stdout+p.stderr)
+          def adb(c,t=90): return sh('adb '+c,t)
+          def log(s): R.append(s); print(s,flush=True)
+          def dismiss_anr():
+              for i in range(3):
+                  adb('shell uiautomator dump /sdcard/a.xml'); x=adb('shell cat /sdcard/a.xml')
+                  if "isn't responding" in x or 'isn&apos;t responding' in x:
+                      m=re.search(r'text="Wait"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',x)
+                      if m:
+                          a=list(map(int,m.groups())); adb(f'shell input tap {(a[0]+a[2])//2} {(a[1]+a[3])//2}'); time.sleep(2)
+                  else: break
+          def shot(n):
+              dismiss_anr()
+              with open(f'smoke/{n}.png','wb') as f: f.write(subprocess.run('adb exec-out screencap -p',shell=True,capture_output=True).stdout)
+          import xml.etree.ElementTree as ET
+          def nodes():
+              adb('shell uiautomator dump /sdcard/u.xml'); adb('pull /sdcard/u.xml smoke/ui.xml')
+              out=[]
+              for n in ET.parse('smoke/ui.xml').iter('node'):
+                  m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.get('bounds',''))
+                  if m:
+                      a=list(map(int,m.groups())); out.append((n.get('text',''),n.get('content-desc',''),((a[0]+a[2])//2,(a[1]+a[3])//2)))
+              os.remove('smoke/ui.xml'); return out
+          def texts(): return [t for t,d,x in nodes() if t]
+          def tap(l,tries=1):
+              for i in range(tries):
+                  for t,d,xy in nodes():
+                      if t==l or d==l:
+                          adb(f'shell input tap {xy[0]} {xy[1]}'); time.sleep(2.5); return True
+                  time.sleep(2)
+              log('NOT FOUND: '+l); return False
+          SZ=re.search(r'(\d+)x(\d+)',adb('shell wm size')); W,H=int(SZ.group(1)),int(SZ.group(2))
+          def nav(i): adb(f'shell input tap {int(W*(0.125+0.25*i))} {int(H*0.885)}'); time.sleep(3)
+          LINK='vless://11111111-2222-3333-4444-555555555555@10-0-2-2.sslip.io:10452?type=ws&security=tls&path=%2Fvpnjantit&host=digital.test&sni=digital.test&encryption=none#Al-Fatiha'
+          LINK_DBL='vless://11111111-2222-3333-4444-555555555555@10-0-2-2.sslip.io:10452?type=ws&security=tls&path=%252Fvpnjantit&host=digital.test&sni=digital.test&encryption=none#doubleenc'
+          LINK_NOPATH='vless://11111111-2222-3333-4444-555555555555@10-0-2-2.sslip.io:10452?type=ws&security=tls&path=%2Fnope&host=digital.test&sni=digital.test&encryption=none#wrongpath'
+          LINK_BAD='vless://11111111-2222-3333-4444-555555555555@10-0-2-2.sslip.io:10444?type=ws&security=tls&path=%2Fvless&host=digital.test&sni=digital.test&encryption=none#badcert'
+          def seed(phone,allow=False,insecure=False,mode='auto',link=None):
+              link=link or LINK
+              adb('shell am force-stop app.routify'); adb('root'); time.sleep(3)
+              adb('shell mkdir -p /data/data/app.routify/shared_prefs')
+              px='<?xml version="1.0" encoding="utf-8" standalone="yes" ?><map><string name="log_level">info</string><string name="mode">%s</string><boolean name="allow_insecure" value="%s" /><boolean name="phone_vpn" value="%s" /><boolean name="force_allowlist" value="%s" /><int name="selected" value="0" /><string name="links">%s</string></map>'%(mode,'true' if insecure else 'false','true' if phone else 'false','true' if allow else 'false',html.escape(json.dumps([link]),quote=False))
+              open('p.xml','w').write(px); adb('push p.xml /data/data/app.routify/shared_prefs/routify_xray.xml'); os.remove('p.xml')
+              uid=adb('shell stat -c %u /data/data/app.routify').strip()
+              adb('shell chown -R '+uid+':'+uid+' /data/data/app.routify/shared_prefs'); adb('shell restorecon -R /data/data/app.routify/shared_prefs')
+              adb('shell rm -rf /data/data/app.routify/app_xray'); adb('unroot'); time.sleep(3); adb('wait-for-device')
+          def start_app():
+              adb('shell monkey -p app.routify -c android.intent.category.LAUNCHER 1'); time.sleep(8); nav(2); time.sleep(2)
+          def srvlog(): return open('server-access.log').read() if os.path.exists('server-access.log') else ''
+          def nc_http(host,port=80,extra=''):
+              return adb(f'shell "printf \'GET / HTTP/1.0\\r\\nHost: {host}\\r\\n\\r\\n\' | toybox nc -w 8 {host} {port} | head -3"',30)
+          def tun(): return adb('shell ip addr show tun0').strip()
+          def stage(name): log('--- '+name)
+
+
+
+          def dumplogs(tag):
+              adb('root'); time.sleep(3); adb('wait-for-device')
+              out=adb("shell 'for f in $(find /data/data/app.routify -name \"*.log\" -o -name \"*applog*\" 2>/dev/null); do echo \"== $f\"; tail -c 900 $f | sed -E \"s/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/<id>/g\"; done'")
+              open('smoke/logs-'+tag+'.txt','w').write(out)
+              adb('unroot'); time.sleep(3); adb('wait-for-device')
+
+          adb('logcat -c')
+          adb('shell settings put global hide_error_dialogs 1'); adb('shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS'); time.sleep(20)
+          def appscreen(): return ', '.join(texts()[:30])
+          def reset():
+              adb('shell am force-stop app.routify'); adb('root'); time.sleep(3); adb('wait-for-device')
+              adb('shell rm -f /data/data/app.routify/shared_prefs/routify_battery.xml'); adb('shell dumpsys deviceidle whitelist -app.routify'); adb('unroot'); time.sleep(3); adb('wait-for-device')
+          def has_prefix(p): return [tx for tx,d,xy in nodes() if tx.startswith(p)]
+          def tap_prefix(p):
+              for tx,d,xy in nodes():
+                  if tx.startswith(p):
+                      adb(f'shell input tap {xy[0]} {xy[1]}'); time.sleep(2.5); return True
+              log('NOT FOUND prefix: '+p); return False
+          def wl(): return adb('shell dumpsys deviceidle whitelist').strip()
+          def open_tethering():
+              adb('shell monkey -p app.routify -c android.intent.category.LAUNCHER 1'); time.sleep(8); nav(0); time.sleep(2)
+          os.makedirs('shots',exist_ok=True)
+          CR=(150,2058)
+          def rshot(n):
+              dismiss_anr()
+              raw=subprocess.run('adb exec-out screencap -p',shell=True,capture_output=True).stdout
+              open('shots/raw.png','wb').write(raw)
+              from PIL import Image
+              Image.open('shots/raw.png').crop((0,CR[0],1080,CR[0]+CR[1])).save(f'shots/{n}.png'); os.remove('shots/raw.png')
+              log('shot '+n+': '+', '.join(texts()[:8]))
+          def swipe_up(): adb(f'shell input swipe {W//2} {int(H*0.72)} {W//2} {int(H*0.30)} 500'); time.sleep(2)
+          def swipe_down(): adb(f'shell input swipe {W//2} {int(H*0.30)} {W//2} {int(H*0.72)} 500'); time.sleep(2)
+          def back(): adb('shell input keyevent 4'); time.sleep(2)
+          def pregrant():
+              for p in ['ACCESS_FINE_LOCATION','ACCESS_COARSE_LOCATION','POST_NOTIFICATIONS']:
+                  adb('shell pm grant app.routify android.permission.'+p)
+              adb('root'); time.sleep(3); adb('wait-for-device'); adb('shell dumpsys deviceidle whitelist +app.routify'); adb('unroot'); time.sleep(3); adb('wait-for-device')
+          def scrolling(prefix,maxn=5):
+              last=None
+              for i in range(1,maxn+1):
+                  rshot(f'{prefix}-{i}')
+                  cur=open(f'shots/{prefix}-{i}.png','rb').read()
+                  if cur==last:
+                      os.remove(f'shots/{prefix}-{i}.png'); break
+                  last=cur; swipe_up()
+              return
+          def boot_wait():
+              adb('wait-for-device')
+              for i in range(60):
+                  if adb('shell getprop sys.boot_completed').strip()=='1': break
+                  time.sleep(5)
+              time.sleep(10)
+          def xray_pids(): return adb('shell "ps -A | grep libxray"').strip().replace('\n',' ; ') or 'none'
+          def via_proxy():
+              return adb('shell "printf \'GET http://1.1.1.1/ HTTP/1.0\\r\\nHost: 1.1.1.1\\r\\n\\r\\n\' | toybox nc -w 8 127.0.0.1 8080 | head -2"',40).strip().replace('\n',' | ')
+          def boot_log():
+              adb('root'); time.sleep(3); adb('wait-for-device')
+              out=adb("shell 'cat /data/data/app.routify/files/*applog* /data/data/app.routify/app_xray/*applog* 2>/dev/null; grep -rl \"Boot:\" /data/data/app.routify 2>/dev/null | head -3'")
+              f=adb("shell 'grep -rh \"Boot:\" /data/data/app.routify 2>/dev/null | tail -8'")
+              adb('unroot'); time.sleep(3); adb('wait-for-device'); return re.sub(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}','<id>',f).strip().replace('\n',' | ')
+          def connect_now():
+              adb('shell monkey -p app.routify -c android.intent.category.LAUNCHER 1'); time.sleep(9); nav(2); time.sleep(2)
+              tap('Connect'); time.sleep(20)
+          seed(False,mode='proxy',link=None); pregrant()
+          adb('shell settings put global hide_error_dialogs 1')
+          stage('B0: connect, then restart the device')
+          connect_now(); shot('b0-connected'); log('screen: '+' | '.join(texts()[:10]))
+          n0=len(srvlog().splitlines()); log('proxy answer: '+via_proxy()); n1=len(srvlog().splitlines()); log('server lines %d -> %d'%(n0,n1))
+          adb('logcat -c'); adb('reboot'); time.sleep(20); boot_wait()
+          log('after restart, xray right away: '+xray_pids())
+          time.sleep(70)
+          stage('B1: after restart, app NOT opened')
+          log('xray processes: '+xray_pids())
+          n0=len(srvlog().splitlines()); log('proxy answer: '+via_proxy()); n1=len(srvlog().splitlines())
+          log('server lines %d -> %d (VPN came back by itself: %s)'%(n0,n1,n1>n0))
+          log('boot log: '+boot_log())
+          adb('shell monkey -p app.routify -c android.intent.category.LAUNCHER 1'); time.sleep(9); nav(2); time.sleep(2); shot('b1-after-restart'); log('app screen: '+' | '.join(texts()[:8]))
+          stage('B2: user taps Disconnect, restart: stays off')
+          tap('Disconnect'); time.sleep(6); shot('b2-disconnected'); log('screen: '+' | '.join(texts()[:6]))
+          adb('reboot'); time.sleep(20); boot_wait(); time.sleep(60)
+          log('xray processes after restart (should be none): '+xray_pids())
+          stage('B3: app update restarts the VPN')
+          connect_now(); log('connected: '+xray_pids())
+          log(adb('install -r /tmp/test-x86_64.apk').strip()); time.sleep(45)
+          log('xray after app update: '+xray_pids()); n0=len(srvlog().splitlines()); log('proxy answer: '+via_proxy()); n1=len(srvlog().splitlines()); log('server lines %d -> %d'%(n0,n1))
+          fatal=sh("adb logcat -d | grep -E 'FATAL EXCEPTION|AndroidRuntime.*app.routify' | head -5").strip()
+          log('crash/fatal in logcat: '+(fatal or 'none'))
+          open('smoke/report.txt','w').write('\n'.join(R))
+
+          PY_EOF
+          cat > server.json <<'JS_EOF'
+          {"log":{"loglevel":"warning","access":"/home/runner/work/server-access.log"},"inbounds":[{"port":10443,"listen":"0.0.0.0","protocol":"vless","settings":{"clients":[{"id":"11111111-2222-3333-4444-555555555555"}],"decryption":"none"}}],"outbounds":[{"protocol":"freedom"}]}
+          JS_EOF
+          sed -i 's|/home/runner/work/server-access.log|'"$PWD"'/server-access.log|' server.json
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/k.pem -out /tmp/c.pem -days 30 -subj "/CN=wrong.example" 2>/dev/null
+          cat > server2.json <<'JS2_EOF'
+          {"log":{"loglevel":"warning","access":"SRVLOG"},"inbounds":[{"port":10444,"listen":"0.0.0.0","protocol":"vless","settings":{"clients":[{"id":"11111111-2222-3333-4444-555555555555"}],"decryption":"none"},"streamSettings":{"network":"ws","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"/tmp/c.pem","keyFile":"/tmp/k.pem"}]},"wsSettings":{"path":"/vless"}}}],"outbounds":[{"protocol":"freedom"}]}
+          JS2_EOF
+          sed -i 's|SRVLOG|'"$PWD"'/server-access.log|' server2.json
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/k3.pem -out /tmp/c3.pem -days 30 -subj "/CN=10-0-2-2.sslip.io" -addext "subjectAltName=DNS:10-0-2-2.sslip.io" 2>/dev/null
+          cat > server3.json <<'JS3_EOF'
+          {"log":{"loglevel":"warning","access":"SRVLOG"},"inbounds":[{"port":10452,"listen":"0.0.0.0","protocol":"vless","settings":{"clients":[{"id":"11111111-2222-3333-4444-555555555555"}],"decryption":"none"},"streamSettings":{"network":"ws","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"/tmp/c3.pem","keyFile":"/tmp/k3.pem"}]},"wsSettings":{"path":"/vpnjantit"}}}],"outbounds":[{"protocol":"freedom"}]}
+          JS3_EOF
+          sed -i 's|SRVLOG|'"$PWD"'/server-access.log|' server3.json
+          cat > run.sh <<'SH_EOF'
+          set -x
+          ./xray-x86_64 run -c server.json > server.out 2>&1 &
+          ./xray-x86_64 run -c server2.json > server2.out 2>&1 &
+          ./xray-x86_64 run -c server3.json > server3.out 2>&1 &
+          sleep 2
+          adb install -r /tmp/test-x86_64.apk 2>&1 | tee smoke/install.txt
+          python3 test.py
+          SH_EOF
+          mkdir -p smoke
+
+      - name: Run on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          disable-animations: true
+          script: bash run.sh
+
+      - name: Upload README screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: readme-screens
+          path: shots
+          retention-days: 7
+
+      - name: Upload test output (not committed)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-output
+          path: |
+            smoke
+            server-access.log
+            server.out
+            server2.out
+            server3.out
+          retention-days: 3

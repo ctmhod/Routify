@@ -26,6 +26,28 @@ The app has four tabs:
 
 By default Routify checks the server's TLS certificate. If you run your own server and its certificate has expired or is self-made, you can turn on **Settings > Allow untrusted server certificate**. Routify then reads the certificate the server shows and pins it by its SHA-256 hash, so only that exact certificate is accepted. Leave it off unless you know why you need it.
 
+## Screenshots
+
+Taken on an Android 11 emulator with Routify v0.3.37.
+
+<!-- screenshots:start -->
+<img src="docs/screenshots/01-tethering-1.png" alt="tethering 1" width="240">
+<img src="docs/screenshots/02-repeater.png" alt="repeater" width="240">
+<img src="docs/screenshots/03-clients.png" alt="clients" width="240">
+<img src="docs/screenshots/04-vpn-with-server.png" alt="vpn with server" width="240">
+<img src="docs/screenshots/05-vpn-options.png" alt="vpn options" width="240">
+<img src="docs/screenshots/06-vpn-connected.png" alt="vpn connected" width="240">
+<img src="docs/screenshots/07-vpn-connected-details.png" alt="vpn connected details" width="240">
+<img src="docs/screenshots/07b-vpn-disconnected.png" alt="07b vpn disconnected" width="240">
+<img src="docs/screenshots/08-settings-1.png" alt="settings 1" width="240">
+<img src="docs/screenshots/08-settings-2.png" alt="settings 2" width="240">
+<img src="docs/screenshots/08-settings-3.png" alt="settings 3" width="240">
+<img src="docs/screenshots/08-settings-4.png" alt="settings 4" width="240">
+<img src="docs/screenshots/08-settings-5.png" alt="settings 5" width="240">
+<img src="docs/screenshots/08-settings-6.png" alt="settings 6" width="240">
+<img src="docs/screenshots/09-theme-picker.png" alt="theme picker" width="240">
+<!-- screenshots:end -->
+
 ## Requirements
 
 - Android 10 or newer (API 29+)

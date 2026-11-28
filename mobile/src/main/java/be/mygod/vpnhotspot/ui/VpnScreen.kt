@@ -34,11 +34,10 @@ fun VpnScreen(hotspotIfaces: Collection<String>) {
     val phoneStatus by PhoneVpn.status.collectAsState()
     var pendingPort by remember { mutableIntStateOf(XrayController.SOCKS_PORT) }
     var allow by remember { mutableStateOf(false) }
+    var afterConsent by remember { mutableStateOf<((Boolean) -> Unit)?>(null) }
     val vpnConsent = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
-        if (r.resultCode == Activity.RESULT_OK) PhoneVpn.begin(pendingPort, allow) else {
-            XrayController.stopPhoneEngine()
-            PhoneVpn.setStatus("This device is not on the VPN (permission not given). Sharing still works.")
-        }
+        val next = afterConsent; afterConsent = null
+        next?.invoke(r.resultCode == Activity.RESULT_OK)
     }
     var logText by remember { mutableStateOf(XrayController.crashLog() + XrayController.readLog()) }
     LaunchedEffect(Unit) { XrayController.installCrashLog(); XrayController.refresh(); XrayController.detectRoot() }
@@ -47,6 +46,33 @@ fun VpnScreen(hotspotIfaces: Collection<String>) {
     val proxyMode = mode == "proxy" || (mode == "auto" && root != true)
     var addresses by remember { mutableStateOf(XrayController.hotspotAddresses()) }
     val servers = links.map { XrayServer.parse(it) }
+    suspend fun runConnect(it: XrayServer, vpnOk: Boolean) {
+        try {
+                                    PhoneVpn.setStatus("")
+            if (proxyMode) XrayController.startProxy(it) else XrayController.start(it, (hotspotIfaces + XrayController.detectSharingIfaces()).distinct())
+                                    if (XrayController.phoneVpn && !vpnOk) PhoneVpn.setStatus("This device is not on the VPN (permission not given). Sharing still works.")
+                                    else if (XrayController.phoneVpn && XrayController.running.value) {
+                                        val port = XrayController.startPhoneEngine(it)
+                                        if (port == null) PhoneVpn.setStatus("This device is not on the VPN (the engine did not start). Sharing still works.")
+                                        else {
+                                            val bad = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { PhoneVpn.serverCheck(port) }
+                                            if (bad.isNotEmpty()) {
+                                                XrayController.stopPhoneEngine()
+                                                XrayController.appendLog("Phone VPN not started: $bad. ${XrayController.logExcerpt("phone.log").ifEmpty { XrayController.logExcerpt("xray.log") }} ${kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { XrayController.probeWs() }}")
+                                                PhoneVpn.setStatus("This device was NOT put on the VPN, so its internet keeps working: $bad. Check the server and the link.")
+                                                return
+                                            }
+                                            pendingPort = port
+                                            allow = !XrayController.useProxy()
+                                            PhoneVpn.begin(port, !XrayController.useProxy())
+                                        }
+                                    }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            XrayController.appendLog("UI: " + e.stackTraceToString())
+        }
+    }
     var editing by remember { mutableStateOf<Int?>(null) }
     editing?.let { ei -> servers.getOrNull(ei)?.let { cur ->
         ServerEditor(cur, running && ei == selected, onClose = { editing = null }, onSave = { updated ->
@@ -98,26 +124,13 @@ fun VpnScreen(hotspotIfaces: Collection<String>) {
                         scope.launch {
                             try {
                                 if (running) XrayController.stop()
-                                else servers.getOrNull(selected)?.let {
-                                    PhoneVpn.setStatus("")
-                                    if (proxyMode) XrayController.startProxy(it) else XrayController.start(it, (hotspotIfaces + XrayController.detectSharingIfaces()).distinct())
-                                    if (XrayController.phoneVpn && XrayController.running.value) {
-                                        val port = XrayController.startPhoneEngine(it)
-                                        if (port == null) PhoneVpn.setStatus("This device is not on the VPN (the engine did not start). Sharing still works.")
-                                        else {
-                                            val bad = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { PhoneVpn.serverCheck(port) }
-                                            if (bad.isNotEmpty()) {
-                                                XrayController.stopPhoneEngine()
-                                                XrayController.appendLog("Phone VPN not started: $bad. ${XrayController.logExcerpt("phone.log").ifEmpty { XrayController.logExcerpt("xray.log") }} ${kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { XrayController.probeWs() }}")
-                                                PhoneVpn.setStatus("This device was NOT put on the VPN, so its internet keeps working: $bad. Check the server and the link.")
-                                                return@let
-                                            }
-                                            pendingPort = port
-                                            allow = !XrayController.useProxy()
-                                            val ask = PhoneVpn.consentIntent(context)
-                                            if (ask != null) vpnConsent.launch(ask) else PhoneVpn.begin(port, !XrayController.useProxy())
-                                        }
-                                    }
+                                else servers.getOrNull(selected)?.let { server ->
+                                    // The Android VPN permission comes first, before anything is applied or connected.
+                                    val ask = if (XrayController.phoneVpn) PhoneVpn.consentIntent(context) else null
+                                    if (ask != null) {
+                                        afterConsent = { granted -> scope.launch { runConnect(server, granted); addresses = XrayController.hotspotAddresses(); logText = XrayController.crashLog() + XrayController.readLog() } }
+                                        vpnConsent.launch(ask)
+                                    } else runConnect(server, true)
                                 }
                                 addresses = XrayController.hotspotAddresses()
                             } catch (e: kotlinx.coroutines.CancellationException) {

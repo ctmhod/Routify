@@ -11,6 +11,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -36,22 +37,16 @@ fun BatteryAskDialog() {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         val r = BatteryAsk.resume; BatteryAsk.resume = null; r?.invoke()
     }
-    val action = BatteryAsk.pending ?: return
-    val decline = { BatteryAsk.markAsked(context); BatteryAsk.pending = null; action() }
-    AlertDialog(
-        onDismissRequest = decline,
-        title = { Text("Allow unrestricted battery use?") },
-        text = { Text("Android can stop Routify in the background to save battery, which can switch your hotspot or VPN off after a while. Allowing unrestricted battery use keeps it running. Android will show its own confirmation next. You can say Not now and everything still works.") },
-        confirmButton = {
-            TextButton(onClick = {
-                BatteryAsk.markAsked(context); BatteryAsk.pending = null; BatteryAsk.resume = action
-                try {
-                    launcher.launch(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + context.packageName)))
-                } catch (e: Exception) {
-                    BatteryAsk.resume = null; action()
-                }
-            }) { Text("Allow") }
-        },
-        dismissButton = { TextButton(onClick = decline) { Text("Not now") } },
-    )
+    val action = BatteryAsk.pending
+    // Android's own prompt comes first and straight away; Routify adds no screen of its own in front of it.
+    LaunchedEffect(action) {
+        if (action != null) {
+            BatteryAsk.markAsked(context); BatteryAsk.pending = null; BatteryAsk.resume = action
+            try {
+                launcher.launch(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + context.packageName)))
+            } catch (e: Exception) {
+                BatteryAsk.resume = null; action()
+            }
+        }
+    }
 }

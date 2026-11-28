@@ -28,6 +28,7 @@ data class XrayServer(
     val insecure: Boolean = false, // allowInsecure=1 in the link (Routify pins the server certificate instead)
     val pin: String = "",          // pcs= in the link: SHA-256 of the server certificate
     val hostName: String = "",     // the server's own DNS name (kept when [host] is replaced by its IP)
+    val mux: Boolean = false,      // multiplexing (mux=1 in the link)
 ) {
     /** Only xtls-rprx-vision is a real flow, and only over plain TCP. Links that say flow=none must not send it to Xray. */
     private fun flowOk() = flow.startsWith("xtls-rprx-vision") && network == "tcp"
@@ -43,6 +44,7 @@ data class XrayServer(
         if (flow.isNotEmpty()) append(" flow=$flow(${if (flowOk()) "sent" else "not sent"})")
         if (insecure) append(" allowInsecure=1")
         if (pin.isNotEmpty()) append(" pin=link")
+        if (mux) append(" mux")
     }
 
     /** Outbound object for Xray's JSON config. */
@@ -81,7 +83,36 @@ data class XrayServer(
             .put("address", host).put("port", port).put("users", JSONArray().put(JSONObject()
                 .put("id", id).put("alterId", alterId).put("security", vmessCipher)))))
         return JSONObject().put("tag", "proxy").put("protocol", protocol)
-            .put("settings", settings).put("streamSettings", stream)
+            .put("settings", settings).put("streamSettings", stream).apply {
+                if (mux && !flowOk()) put("mux", JSONObject().put("enabled", true).put("concurrency", 8))
+            }
+    }
+
+    /** Builds a share link from these fields, so an edited server is saved the same way as a pasted one. */
+    fun toLink(): String {
+        fun enc(v: String) = java.net.URLEncoder.encode(v, "UTF-8")
+        if (protocol == "vmess") {
+            val j = JSONObject().put("v", "2").put("ps", name).put("add", host).put("port", port.toString())
+                .put("id", id).put("aid", alterId.toString()).put("scy", vmessCipher).put("net", network)
+                .put("host", wsHost).put("path", path).put("tls", if (security == "tls") "tls" else "")
+                .put("sni", sni).put("alpn", alpn).put("fp", fingerprint)
+            if (mux) j.put("mux", "1")
+            return "vmess://" + Base64.encodeToString(j.toString().toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+        }
+        val q = linkedMapOf("type" to network, "security" to security)
+        if (flow.isNotEmpty()) q["flow"] = flow
+        if (sni.isNotEmpty()) q["sni"] = sni
+        if (wsHost.isNotEmpty()) q["host"] = wsHost
+        if (path.isNotEmpty()) q["path"] = path
+        if (alpn.isNotEmpty()) q["alpn"] = alpn
+        if (fingerprint.isNotEmpty()) q["fp"] = fingerprint
+        if (publicKey.isNotEmpty()) q["pbk"] = publicKey
+        if (shortId.isNotEmpty()) q["sid"] = shortId
+        if (insecure) q["allowInsecure"] = "1"
+        if (pin.isNotEmpty()) q["pcs"] = pin
+        if (mux) q["mux"] = "1"
+        val h = if (':' in host && !host.startsWith("[")) "[$host]" else host
+        return "vless://${enc(id).replace("%40", "@")}@$h:$port?" + q.entries.joinToString("&") { "${it.key}=${enc(it.value)}" } + "#" + enc(name)
     }
 
     companion object {
@@ -112,7 +143,7 @@ data class XrayServer(
                 flow = q["flow"] ?: "", alpn = q["alpn"] ?: "", fingerprint = q["fp"] ?: "",
                 publicKey = q["pbk"] ?: "", shortId = q["sid"] ?: "",
                 insecure = (q["allowInsecure"] ?: q["insecure"]) in listOf("1", "true"),
-                pin = q["pcs"] ?: "")
+                pin = q["pcs"] ?: "", mux = q["mux"] in listOf("1", "true"))
         }
 
         private fun parseVmess(t: String): XrayServer? {
@@ -127,7 +158,7 @@ data class XrayServer(
                 sni = j.optString("sni"), wsHost = j.optString("host"), path = j.optString("path"),
                 alpn = j.optString("alpn"), fingerprint = j.optString("fp"),
                 alterId = j.optString("aid").toIntOrNull() ?: 0,
-                vmessCipher = j.optString("scy").ifEmpty { "auto" })
+                vmessCipher = j.optString("scy").ifEmpty { "auto" }, mux = j.optString("mux") in listOf("1", "true"))
         }
     }
 }

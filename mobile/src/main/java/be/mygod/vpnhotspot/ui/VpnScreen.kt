@@ -47,6 +47,14 @@ fun VpnScreen(hotspotIfaces: Collection<String>) {
     val proxyMode = mode == "proxy" || (mode == "auto" && root != true)
     var addresses by remember { mutableStateOf(XrayController.hotspotAddresses()) }
     val servers = links.map { XrayServer.parse(it) }
+    var editing by remember { mutableStateOf<Int?>(null) }
+    editing?.let { ei -> servers.getOrNull(ei)?.let { cur ->
+        ServerEditor(cur, running && ei == selected, onClose = { editing = null }, onSave = { updated ->
+            links = links.mapIndexed { j, l -> if (j == ei) updated.toLink() else l }
+            XrayController.saveLinks(links)
+            editing = null
+        })
+    } }
 
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
@@ -190,6 +198,7 @@ fun VpnScreen(hotspotIfaces: Collection<String>) {
                         if (s != null) Text("${s.protocol} ${s.network}/${s.security} ${s.host}:${s.port}",
                             style = MaterialTheme.typography.bodySmall)
                     }
+                    TextButton(onClick = { editing = i }, enabled = s != null) { Text("Edit") }
                     TextButton(onClick = {
                         links = links.filterIndexed { j, _ -> j != i }
                         XrayController.saveLinks(links)

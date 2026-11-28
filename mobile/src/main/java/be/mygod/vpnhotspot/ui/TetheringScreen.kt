@@ -243,6 +243,7 @@ fun TetheringScreen(
         if (showBluetooth) bluetoothTethering?.active else null
     }
 
+    BatteryAskDialog()
     PullToRefreshBox(
         isRefreshing = false,
         onRefresh = {
@@ -257,9 +258,11 @@ fun TetheringScreen(
                 if (showRepeater) {
                     val active = repeaterActive == true
                     val toggleRepeater: () -> Unit = {
-                        if (active) onStopRepeater() else startRepeater(if (Build.VERSION.SDK_INT >= 33) {
-                            Manifest.permission.NEARBY_WIFI_DEVICES
-                        } else Manifest.permission.ACCESS_FINE_LOCATION)
+                        if (active) onStopRepeater() else BatteryAsk.gate(context) {
+                            startRepeater(if (Build.VERSION.SDK_INT >= 33) {
+                                Manifest.permission.NEARBY_WIFI_DEVICES
+                            } else Manifest.permission.ACCESS_FINE_LOCATION)
+                        }
                     }
                     row(R.string.title_repeater) {
                         TetheringRow(
@@ -283,9 +286,11 @@ fun TetheringScreen(
                 row(R.string.tethering_temp_hotspot) {
                     val toggleLocalOnly: () -> Unit = {
                         if (localOnlyIface == null) {
-                            startLocalOnly(if (Build.VERSION.SDK_INT >= 33) {
-                                Manifest.permission.NEARBY_WIFI_DEVICES
-                            } else Manifest.permission.ACCESS_FINE_LOCATION)
+                            BatteryAsk.gate(context) {
+                                startLocalOnly(if (Build.VERSION.SDK_INT >= 33) {
+                                    Manifest.permission.NEARBY_WIFI_DEVICES
+                                } else Manifest.permission.ACCESS_FINE_LOCATION)
+                            }
                         } else onStopTemporaryHotspot()
                     }
                     TetheringRow(
@@ -338,8 +343,10 @@ fun TetheringScreen(
                                 onClick = {
                                     if (active) context.startService(Intent(context, TetheringService::class.java)
                                         .putExtra(TetheringService.EXTRA_REMOVE_INTERFACE, iface))
-                                    else context.startForegroundService(Intent(context, TetheringService::class.java)
-                                        .putExtra(TetheringService.EXTRA_ADD_INTERFACES, arrayOf(iface)))
+                                    else BatteryAsk.gate(context) {
+                                        context.startForegroundService(Intent(context, TetheringService::class.java)
+                                            .putExtra(TetheringService.EXTRA_ADD_INTERFACES, arrayOf(iface)))
+                                    }
                                 },
                             )
                         }
@@ -559,12 +566,15 @@ private fun TetheringTypeRow(
         } catch (e: RuntimeException) {
             app.logEvent("manage_write_settings") { param("message", e.toString()) }
         }
-        scope.launch {
-            runTethering(context, snackbarHostState, TetherType.fromTetheringType(tetheringType)) {
-                if (checked) TetheringManagerCompat.stopTethering(tetheringType)
-                else TetheringManagerCompat.startTethering(tetheringType, true)
+        val go: () -> Unit = {
+            scope.launch {
+                runTethering(context, snackbarHostState, TetherType.fromTetheringType(tetheringType)) {
+                    if (checked) TetheringManagerCompat.stopTethering(tetheringType)
+                    else TetheringManagerCompat.startTethering(tetheringType, true)
+                }
             }
         }
+        if (checked) go() else BatteryAsk.gate(context, go)
     }
     TetheringRow(
         icon = icon,
@@ -605,9 +615,11 @@ private fun BluetoothTetheringRow(
                         bluetoothTethering?.stop()
                     }
                 }
-                false -> scope.launch {
-                    runTethering(context, snackbarHostState, TetherType.BLUETOOTH, onRefresh) {
-                        bluetoothTethering?.start(context)
+                false -> BatteryAsk.gate(context) {
+                    scope.launch {
+                        runTethering(context, snackbarHostState, TetherType.BLUETOOTH, onRefresh) {
+                            bluetoothTethering?.start(context)
+                        }
                     }
                 }
                 null -> ManageBar.start(context::startActivity)

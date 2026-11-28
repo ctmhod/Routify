@@ -1,8 +1,12 @@
 # Routify
 
+<p align="center">
+  <img src="docs/icon.png" width="128" alt="Routify icon">
+</p>
+
 Share your phone's connection as a hotspot and send the traffic of connected devices through a VLESS or VMess server. Built for old rooted phones, but the proxy mode works without root.
 
-> Status: early. It compiles and runs on an Android 11 emulator in tests. It has not been tested on a real phone yet.
+> Status: early. Every release is tested on an Android 11 emulator (proxy mode) and is being tried on real devices. Root mode and the Wi-Fi Direct repeater cannot run on an emulator, so they have had less testing.
 
 ## What it does
 
@@ -28,7 +32,7 @@ By default Routify checks the server's TLS certificate. If you run your own serv
 
 ## Screenshots
 
-Taken on an Android 11 emulator with Routify v0.3.37.
+Taken on an Android 11 emulator with Routify v0.3.39.
 
 <!-- screenshots:start -->
 <img src="docs/screenshots/01-tethering-1.png" alt="tethering 1" width="240">

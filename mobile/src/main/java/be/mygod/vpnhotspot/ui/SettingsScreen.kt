@@ -159,18 +159,18 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
         }
     }
     SettingsList {
-        preferenceGroup(key = R.string.settings_service_clean) {
-            row(R.string.settings_service_clean) {
-                PreferenceRow(
-                    icon = R.drawable.ic_cleaning_services,
-                    title = stringResource(R.string.settings_service_clean),
-                    summary = stringResource(R.string.settings_service_clean_summary),
-                    onClick = { if (!inspectionMode) RoutingManager.clean() },
-                )
+        item(key = "sec_vpn") {
+            PreferenceGroup(title = "VPN") {
+row("routify_vpn_cover") { VpnCoverageRow() }
+row("routify_vpn_fail") { VpnFailRow() }
+row("routify_vpn_dns") { VpnDnsRow() }
+row("routify_insecure") { InsecureRow() }
+row("routify_vpn_log") { VpnLogRow() }
             }
         }
-        preferenceGroup(title = R.string.settings_upstream) {
-            row(R.string.settings_service_upstream) {
+        item(key = "sec_share") {
+            PreferenceGroup(title = "Hotspot sharing") {
+row(R.string.settings_service_upstream) {
                 val fallback = stringResource(R.string.settings_service_upstream_auto)
                 TextPreferenceRow(
                     icon = R.drawable.ic_route,
@@ -188,7 +188,7 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
                     },
                 )
             }
-            row(R.string.settings_upstream_fallback) {
+row(R.string.settings_upstream_fallback) {
                 val fallbackLabel = stringResource(R.string.settings_upstream_fallback_auto)
                 TextPreferenceRow(
                     icon = R.drawable.ic_alt_route,
@@ -208,9 +208,7 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
                     },
                 )
             }
-        }
-        preferenceGroup(title = R.string.settings_downstream) {
-            row(R.string.settings_service_masquerade) {
+row(R.string.settings_service_masquerade) {
                 ListPreferenceRow(
                     icon = R.drawable.ic_nat,
                     title = R.string.settings_service_masquerade,
@@ -236,7 +234,7 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
                     },
                 )
             }
-            row(R.string.settings_service_ipv6_mode) {
+row(R.string.settings_service_ipv6_mode) {
                 ListPreferenceRow(
                     icon = R.drawable.ic_counter_6,
                     title = R.string.settings_service_ipv6_mode,
@@ -258,7 +256,7 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
                     },
                 )
             }
-            row(R.string.settings_system_tether_offload) {
+row(R.string.settings_system_tether_offload) {
                 SwitchPreferenceRow(
                     icon = R.drawable.ic_speed,
                     title = R.string.settings_system_tether_offload,
@@ -288,9 +286,12 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
                     },
                 )
             }
+row("routify_limits_defaults") { DefaultLimitsRow() }
+            }
         }
-        preferenceGroup(title = R.string.settings_misc) {
-            row(R.string.settings_service_wifi_lock) {
+        item(key = "sec_bg") {
+            PreferenceGroup(title = "Background and startup") {
+row(R.string.settings_service_wifi_lock) {
                 ListPreferenceRow(
                     icon = R.drawable.ic_wifi_lock,
                     title = R.string.settings_service_wifi_lock,
@@ -316,7 +317,7 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
                     },
                 )
             }
-            row(R.string.settings_service_auto_start) {
+row(R.string.settings_service_auto_start) {
                 SwitchPreferenceRow(
                     icon = R.drawable.ic_power_settings_new,
                     title = R.string.settings_service_auto_start,
@@ -330,7 +331,7 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
                     },
                 )
             }
-            if (Build.VERSION.SDK_INT >= 30) row(R.string.settings_service_temp_hotspot_use_system) {
+if (Build.VERSION.SDK_INT >= 30) row(R.string.settings_service_temp_hotspot_use_system) {
                 SwitchPreferenceRow(
                     icon = R.drawable.ic_content_copy,
                     title = R.string.settings_service_temp_hotspot_use_system,
@@ -345,18 +346,56 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
                     },
                 )
             }
-        }
-        preferenceGroup(key = "routify_limits") {
-            row("routify_limits_defaults") {
-                DefaultLimitsRow()
             }
-            row("routify_vpn_cover") { VpnCoverageRow() }
-            row("routify_vpn_fail") { VpnFailRow() }
-            row("routify_vpn_dns") { VpnDnsRow() }
-            row("routify_vpn_log") { VpnLogRow() }
-            row("routify_theme") { ThemeRow() }
-            row("routify_insecure") { InsecureRow() }
-            row("routify_error_log") { ErrorLogRow() }
+        }
+        item(key = "sec_look") {
+            PreferenceGroup(title = "Appearance") {
+row("routify_theme") { ThemeRow() }
+            }
+        }
+        item(key = "sec_help") {
+            PreferenceGroup(title = "Maintenance and help") {
+row(R.string.settings_service_clean) {
+                PreferenceRow(
+                    icon = R.drawable.ic_cleaning_services,
+                    title = stringResource(R.string.settings_service_clean),
+                    summary = stringResource(R.string.settings_service_clean_summary),
+                    onClick = { if (!inspectionMode) RoutingManager.clean() },
+                )
+            }
+row("routify_error_log") { ErrorLogRow() }
+row(R.string.settings_misc_logcat) {
+                PreferenceRow(
+                    icon = R.drawable.ic_bug_report,
+                    title = stringResource(R.string.settings_misc_logcat),
+                    summary = "Share the system log when you report a bug",
+                    onClick = {
+                        if (!inspectionMode) scope.launch {
+                            try {
+                                shareLogcat(context)
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Timber.w(e)
+                                snackbarHostState.showLongSnackbar(e.readableMessage)
+                            }
+                        }
+                    },
+                )
+            }
+row(OssLicensesR.string.oss_license_title) {
+                PreferenceRow(
+                    icon = R.drawable.ic_license,
+                    title = stringResource(OssLicensesR.string.oss_license_title),
+                    summary = stringResource(OssLicensesR.string.preferences_license_summary),
+                    onClick = {
+                        if (!inspectionMode) {
+                            context.startActivity(Intent(context, OssLicensesMenuActivity::class.java))
+                        }
+                    },
+                )
+            }
+            }
         }
         item(key = "routify_developer_group") {
             PreferenceGroup(title = "Developer") {
@@ -394,39 +433,6 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
             }
             }
         }
-        preferenceGroup(title = R.string.settings_help) {
-            row(R.string.settings_misc_logcat) {
-                PreferenceRow(
-                    icon = R.drawable.ic_bug_report,
-                    title = stringResource(R.string.settings_misc_logcat),
-                    summary = "Share the system log when you report a bug",
-                    onClick = {
-                        if (!inspectionMode) scope.launch {
-                            try {
-                                shareLogcat(context)
-                            } catch (e: CancellationException) {
-                                throw e
-                            } catch (e: Exception) {
-                                Timber.w(e)
-                                snackbarHostState.showLongSnackbar(e.readableMessage)
-                            }
-                        }
-                    },
-                )
-            }
-            row(OssLicensesR.string.oss_license_title) {
-                PreferenceRow(
-                    icon = R.drawable.ic_license,
-                    title = stringResource(OssLicensesR.string.oss_license_title),
-                    summary = stringResource(OssLicensesR.string.preferences_license_summary),
-                    onClick = {
-                        if (!inspectionMode) {
-                            context.startActivity(Intent(context, OssLicensesMenuActivity::class.java))
-                        }
-                    },
-                )
-            }
-        }
     }
 }
 
@@ -460,7 +466,6 @@ private fun <T> ListPreferenceRow(
 }
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
 private fun TextPreferenceRow(
     @DrawableRes icon: Int,
     @StringRes title: Int,
@@ -470,91 +475,53 @@ private fun TextPreferenceRow(
     placeholder: String,
     onValueChange: (String) -> Unit,
 ) {
-    var editing by rememberSaveable { mutableStateOf(false) }
-    var draft by rememberTextFieldValueAtEnd(value, editing)
-    var suggestionsExpanded by remember(editing) { mutableStateOf(false) }
-    val suggestions by rememberInterfaceNameSuggestions(!LocalInspectionMode.current && editing)
-    val filteredSuggestions = remember(suggestions, draft.text) {
-        suggestions.filter { draft.text.isBlank() || it.contains(draft.text, ignoreCase = true) }
-    }
+    var selecting by rememberSaveable { mutableStateOf(false) }
+    var custom by rememberSaveable { mutableStateOf(false) }
+    val suggestions by rememberInterfaceNameSuggestions(!LocalInspectionMode.current && selecting)
     val titleText = stringResource(title)
-    LaunchedEffect(editing, suggestions) {
-        if (editing && suggestions.isNotEmpty()) suggestionsExpanded = true
+    val names = remember(suggestions, value) {
+        (suggestions + listOfNotNull(value.ifBlank { null })).distinct().sorted()
     }
+    val entries = listOf(placeholder) + names + listOf("Custom name...")
     PreferenceRow(
         icon = icon,
         title = titleText,
         summaryContent = { Text(summary) },
-        onClick = { editing = true },
+        onClick = { selecting = true },
     )
-    if (editing) {
-        val focusRequester = rememberDialogFocusRequester()
+    if (selecting) PreferenceSelectionSheet(
+        title = titleText,
+        entryCount = entries.size,
+        selectedIndex = if (value.isBlank()) 0 else entries.indexOf(value).coerceAtLeast(0),
+        entryLabel = entries::get,
+        description = description,
+        onDismissRequest = { selecting = false },
+        onSelect = {
+            when (it) {
+                0 -> onValueChange("")
+                entries.lastIndex -> custom = true
+                else -> onValueChange(entries[it])
+            }
+        },
+    )
+    if (custom) {
+        var draft by remember { mutableStateOf(value) }
         AlertDialog(
-            onDismissRequest = { editing = false },
+            onDismissRequest = { custom = false },
             title = { Text(titleText) },
             text = {
-                val menuExpanded = suggestionsExpanded && filteredSuggestions.isNotEmpty()
-                val menuScrollState = rememberScrollState()
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text(
-                        text = description,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    ExposedDropdownMenuBox(
-                        expanded = menuExpanded,
-                        onExpandedChange = { suggestionsExpanded = it },
-                    ) {
-                        OutlinedTextField(
-                            value = draft,
-                            onValueChange = {
-                                draft = it
-                                suggestionsExpanded = true
-                            },
-                            modifier = Modifier
-                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable)
-                                .fillMaxWidth()
-                                .focusRequester(focusRequester)
-                                .semantics { contentDescription = titleText },
-                            placeholder = { Text(placeholder) },
-                            trailingIcon = {
-                                ExposedDropdownMenuDefaults.TrailingIcon(
-                                    expanded = menuExpanded,
-                                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.SecondaryEditable),
-                                )
-                            },
-                            colors = OutlinedTextFieldDefaults.tonalColors(),
-                            shape = OutlinedTextFieldDefaults.roundedShape,
-                            singleLine = true,
-                        )
-                        ExposedDropdownMenu(
-                            expanded = menuExpanded,
-                            onDismissRequest = { suggestionsExpanded = false },
-                            modifier = Modifier.nonInteractiveVerticalScrollbar(menuScrollState.scrollIndicatorState),
-                            scrollState = menuScrollState,
-                        ) {
-                            for (suggestion in filteredSuggestions) DropdownMenuItem(
-                                text = { Text(suggestion) },
-                                onClick = {
-                                    draft = TextFieldValue(suggestion, TextRange(suggestion.length))
-                                    suggestionsExpanded = false
-                                },
-                            )
-                        }
-                    }
-                }
+                OutlinedTextField(
+                    value = draft, onValueChange = { draft = it }, singleLine = true,
+                    label = { Text("Interface name") }, placeholder = { Text(placeholder) },
+                )
             },
             confirmButton = {
-                DialogConfirmButton(onClick = {
-                    onValueChange(draft.text)
-                    editing = false
-                }) {
+                DialogConfirmButton(onClick = { onValueChange(draft.trim()); custom = false }) {
                     Text(stringResource(android.R.string.ok))
                 }
             },
             dismissButton = {
-                DialogDismissButton(onClick = { editing = false }) {
-                    Text(stringResource(android.R.string.cancel))
-                }
+                DialogDismissButton(onClick = { custom = false }) { Text(stringResource(android.R.string.cancel)) }
             },
         )
     }

@@ -1,0 +1,274 @@
+name: Traffic, host and SNI check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build local test server binary
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+      - name: Get Xray and the released APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git clone --depth 1 --branch v26.11.9 https://github.com/XTLS/Xray-core /tmp/xray
+          (cd /tmp/xray && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o $GITHUB_WORKSPACE/xray-x86_64 ./main)
+          gh release download v0.3.36 --repo ctmhod/Routify --pattern '*x86_64.apk' --dir /tmp/rel
+          ls -l /tmp/rel; cp /tmp/rel/*x86_64.apk /tmp/test-x86_64.apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install packet tools
+        run: sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tshark tcpdump
+      - name: Write test files
+        run: |
+          mkdir -p smoke
+          cat > test.py <<'PY_EOF'
+          import subprocess,re,time,os,json,html,socket
+          os.makedirs('smoke',exist_ok=True)
+          R=[]
+          def sh(c,t=90):
+              p=subprocess.run(c,shell=True,capture_output=True,text=True,timeout=t); return (p.stdout+p.stderr)
+          def adb(c,t=90): return sh('adb '+c,t)
+          def log(s): R.append(s); print(s,flush=True)
+          def dismiss_anr():
+              for i in range(3):
+                  adb('shell uiautomator dump /sdcard/a.xml'); x=adb('shell cat /sdcard/a.xml')
+                  if "isn't responding" in x or 'isn&apos;t responding' in x:
+                      m=re.search(r'text="Wait"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',x)
+                      if m:
+                          a=list(map(int,m.groups())); adb(f'shell input tap {(a[0]+a[2])//2} {(a[1]+a[3])//2}'); time.sleep(2)
+                  else: break
+          def shot(n):
+              dismiss_anr()
+              with open(f'smoke/{n}.png','wb') as f: f.write(subprocess.run('adb exec-out screencap -p',shell=True,capture_output=True).stdout)
+          import xml.etree.ElementTree as ET
+          def nodes():
+              adb('shell uiautomator dump /sdcard/u.xml'); adb('pull /sdcard/u.xml smoke/ui.xml')
+              out=[]
+              for n in ET.parse('smoke/ui.xml').iter('node'):
+                  m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.get('bounds',''))
+                  if m:
+                      a=list(map(int,m.groups())); out.append((n.get('text',''),n.get('content-desc',''),((a[0]+a[2])//2,(a[1]+a[3])//2)))
+              os.remove('smoke/ui.xml'); return out
+          def texts(): return [t for t,d,x in nodes() if t]
+          def tap(l,tries=1):
+              for i in range(tries):
+                  for t,d,xy in nodes():
+                      if t==l or d==l:
+                          adb(f'shell input tap {xy[0]} {xy[1]}'); time.sleep(2.5); return True
+                  time.sleep(2)
+              log('NOT FOUND: '+l); return False
+          SZ=re.search(r'(\d+)x(\d+)',adb('shell wm size')); W,H=int(SZ.group(1)),int(SZ.group(2))
+          def nav(i): adb(f'shell input tap {int(W*(0.125+0.25*i))} {int(H*0.885)}'); time.sleep(3)
+          LINK='vless://11111111-2222-3333-4444-555555555555@10-0-2-2.sslip.io:10452?type=ws&security=tls&path=%2Fvpnjantit&host=digital.test&sni=digital.test&encryption=none#Al-Fatiha'
+          LINK_DBL='vless://11111111-2222-3333-4444-555555555555@10-0-2-2.sslip.io:10452?type=ws&security=tls&path=%252Fvpnjantit&host=digital.test&sni=digital.test&encryption=none#doubleenc'
+          LINK_NOPATH='vless://11111111-2222-3333-4444-555555555555@10-0-2-2.sslip.io:10452?type=ws&security=tls&path=%2Fnope&host=digital.test&sni=digital.test&encryption=none#wrongpath'
+          LINK_BAD='vless://11111111-2222-3333-4444-555555555555@10-0-2-2.sslip.io:10444?type=ws&security=tls&path=%2Fvless&host=digital.test&sni=digital.test&encryption=none#badcert'
+          def seed(phone,allow=False,insecure=False,mode='auto',link=None):
+              link=link or LINK
+              adb('shell am force-stop app.routify'); adb('root'); time.sleep(3)
+              adb('shell mkdir -p /data/data/app.routify/shared_prefs')
+              px='<?xml version="1.0" encoding="utf-8" standalone="yes" ?><map><string name="log_level">info</string><string name="mode">%s</string><boolean name="allow_insecure" value="%s" /><boolean name="phone_vpn" value="%s" /><boolean name="force_allowlist" value="%s" /><int name="selected" value="0" /><string name="links">%s</string></map>'%(mode,'true' if insecure else 'false','true' if phone else 'false','true' if allow else 'false',html.escape(json.dumps([link]),quote=False))
+              open('p.xml','w').write(px); adb('push p.xml /data/data/app.routify/shared_prefs/routify_xray.xml'); os.remove('p.xml')
+              uid=adb('shell stat -c %u /data/data/app.routify').strip()
+              adb('shell chown -R '+uid+':'+uid+' /data/data/app.routify/shared_prefs'); adb('shell restorecon -R /data/data/app.routify/shared_prefs')
+              adb('shell rm -rf /data/data/app.routify/app_xray'); adb('unroot'); time.sleep(3); adb('wait-for-device')
+          def start_app():
+              adb('shell monkey -p app.routify -c android.intent.category.LAUNCHER 1'); time.sleep(8); nav(2); time.sleep(2)
+          def srvlog(): return open('server-access.log').read() if os.path.exists('server-access.log') else ''
+          def nc_http(host,port=80,extra=''):
+              return adb(f'shell "printf \'GET / HTTP/1.0\\r\\nHost: {host}\\r\\n\\r\\n\' | toybox nc -w 8 {host} {port} | head -3"',30)
+          def tun(): return adb('shell ip addr show tun0').strip()
+          def stage(name): log('--- '+name)
+
+
+
+          def dumplogs(tag):
+              adb('root'); time.sleep(3); adb('wait-for-device')
+              out=adb("shell 'for f in $(find /data/data/app.routify -name \"*.log\" -o -name \"*applog*\" 2>/dev/null); do echo \"== $f\"; tail -c 900 $f | sed -E \"s/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/<id>/g\"; done'")
+              open('smoke/logs-'+tag+'.txt','w').write(out)
+              adb('unroot'); time.sleep(3); adb('wait-for-device')
+
+          adb('logcat -c')
+          adb('shell settings put global hide_error_dialogs 1'); adb('shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS'); time.sleep(20)
+          def appscreen(): return ', '.join(texts()[:30])
+          def reset():
+              adb('shell am force-stop app.routify'); adb('root'); time.sleep(3); adb('wait-for-device')
+              adb('shell rm -f /data/data/app.routify/shared_prefs/routify_battery.xml'); adb('shell dumpsys deviceidle whitelist -app.routify'); adb('unroot'); time.sleep(3); adb('wait-for-device')
+          def has_prefix(p): return [tx for tx,d,xy in nodes() if tx.startswith(p)]
+          def tap_prefix(p):
+              for tx,d,xy in nodes():
+                  if tx.startswith(p):
+                      adb(f'shell input tap {xy[0]} {xy[1]}'); time.sleep(2.5); return True
+              log('NOT FOUND prefix: '+p); return False
+          def wl(): return adb('shell dumpsys deviceidle whitelist').strip()
+          def open_tethering():
+              adb('shell monkey -p app.routify -c android.intent.category.LAUNCHER 1'); time.sleep(8); nav(0); time.sleep(2)
+          os.makedirs('shots',exist_ok=True)
+          CR=(84,2124)
+          def rshot(n):
+              dismiss_anr()
+              raw=subprocess.run('adb exec-out screencap -p',shell=True,capture_output=True).stdout
+              open('shots/raw.png','wb').write(raw)
+              sh(f'convert shots/raw.png -crop 1080x{CR[1]}+0+{CR[0]} +repage shots/{n}.png'); os.remove('shots/raw.png')
+              log('shot '+n+': '+', '.join(texts()[:8]))
+          def swipe_up(): adb(f'shell input swipe {W//2} {int(H*0.72)} {W//2} {int(H*0.30)} 500'); time.sleep(2)
+          def back(): adb('shell input keyevent 4'); time.sleep(2)
+          def pregrant():
+              for p in ['ACCESS_FINE_LOCATION','ACCESS_COARSE_LOCATION','POST_NOTIFICATIONS']:
+                  adb('shell pm grant app.routify android.permission.'+p)
+              adb('root'); time.sleep(3); adb('wait-for-device'); adb('shell dumpsys deviceidle whitelist +app.routify'); adb('unroot'); time.sleep(3); adb('wait-for-device')
+          def scrolling(prefix,maxn=5):
+              last=None
+              for i in range(1,maxn+1):
+                  rshot(f'{prefix}-{i}')
+                  cur=open(f'shots/{prefix}-{i}.png','rb').read()
+                  if cur==last:
+                      os.remove(f'shots/{prefix}-{i}.png'); break
+                  last=cur; swipe_up()
+              return
+
+          def mk(sni=None,host=None):
+              q='type=ws&security=tls&path=%2Fp'+('&host='+host if host else '')+('&sni='+sni if sni else '')+'&encryption=none'
+              return 'vless://11111111-2222-3333-4444-555555555555@10-0-2-2.sslip.io:10452?'+q+'#Al-Fatiha'
+          def sniLog():
+              try: return [json.loads(l) for l in open('sni-log.jsonl') if l.strip()]
+              except Exception: return []
+          def cfgdump():
+              adb('root'); time.sleep(3); adb('wait-for-device')
+              out=adb("shell 'for f in $(find /data/data/app.routify -name \"*.json\" 2>/dev/null); do cat $f; echo; done'")
+              adb('unroot'); time.sleep(3); adb('wait-for-device')
+              res=[]
+              for m in re.finditer(r'\{.*\}',out):
+                  try: j=json.loads(m.group(0))
+                  except Exception: continue
+                  for ob in j.get('outbounds',[]) if isinstance(j,dict) else []:
+                      ss=ob.get('streamSettings')
+                      if ss: res.append({'network':ss.get('network'),'security':ss.get('security'),'tls':{k:v for k,v in (ss.get('tlsSettings') or {}).items() if k in ('serverName','allowInsecure','alpn','fingerprint')},'ws':{k:v for k,v in (ss.get('wsSettings') or {}).items() if k in ('path','host','headers')}})
+              return res
+          def pull(url):
+              return adb(f'shell "printf \'GET {url} HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\n\\r\\n\' | toybox nc -w 90 127.0.0.1 8080 | wc -c"',120).strip()
+          pregrant()
+          cases=[('A','sni-alpha.example','host-alpha.example'),('B','sni-beta.example','host-beta.example'),('C',None,None)]
+          for n,sni,host in cases:
+              stage(f'T{n}: link sni={sni} host={host}')
+              seed(False,mode='proxy',link=mk(sni,host)); pregrant()
+              adb('shell monkey -p app.routify -c android.intent.category.LAUNCHER 1'); time.sleep(9); nav(2); time.sleep(2)
+              tap('Connect'); time.sleep(14)
+              n0=len(sniLog())
+              small=pull('http://127.0.0.1:8000/small.txt'); time.sleep(2)
+              big=pull('http://127.0.0.1:8000/big.bin'); time.sleep(4)
+              log('device received bytes, small file (expected ~%s incl. headers): %s'%('1000',small))
+              log('device received bytes, big file (expected ~20000000 + headers): '+big)
+              rows=sniLog()[n0:]
+              for r in rows: log('  server-side TLS endpoint saw: '+json.dumps(r))
+              log('  sum of bytes down from server for this case: %d, up: %d'%(sum(r.get('down',0) for r in rows),sum(r.get('up',0) for r in rows)))
+              log('  app generated config (no id/address): '+json.dumps(cfgdump()))
+              tap('Disconnect'); time.sleep(3)
+          fatal=sh("adb logcat -d | grep -E 'FATAL EXCEPTION|AndroidRuntime.*app.routify' | head -5").strip()
+          log('crash/fatal in logcat: '+(fatal or 'none'))
+          open('smoke/report.txt','w').write('\n'.join(R))
+
+          PY_EOF
+          cat > sniproxy.py <<'SP_EOF'
+          import ssl,socket,threading,json,time
+          ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); ctx.load_cert_chain('/tmp/c3.pem','/tmp/k3.pem')
+          tl=threading.local()
+          def cb(s,name,c): tl.sni=name
+          ctx.sni_callback=cb
+          LOG=open('sni-log.jsonl','a',buffering=1)
+          def pipe(a,b,cnt,k):
+              try:
+                  while True:
+                      d=a.recv(65536)
+                      if not d: break
+                      cnt[k]+=len(d); b.sendall(d)
+              except Exception: pass
+              try: b.shutdown(socket.SHUT_WR)
+              except Exception: pass
+          def handle(raw):
+              tl.sni=None
+              try:
+                  s=ctx.wrap_socket(raw,server_side=True)
+              except Exception as e:
+                  LOG.write(json.dumps({'tls_error':str(e)[:80],'sni':tl.sni})+'\n'); return
+              sni=tl.sni
+              buf=b''
+              while b'\r\n\r\n' not in buf:
+                  d=s.recv(4096)
+                  if not d: return
+                  buf+=d
+              head=buf.split(b'\r\n\r\n')[0].decode('latin1').split('\r\n')
+              hd={l.split(':',1)[0].lower():l.split(':',1)[1].strip() for l in head[1:] if ':' in l}
+              rec={'sni':sni,'host':hd.get('host'),'request':head[0].split(' HTTP')[0],'upgrade':hd.get('upgrade')}
+              u=socket.create_connection(('127.0.0.1',10453)); u.sendall(buf)
+              cnt={'up':len(buf),'down':0}
+              t=threading.Thread(target=pipe,args=(s,u,cnt,'up')); t.start()
+              pipe(u,s,cnt,'down'); t.join(5)
+              rec.update(cnt); LOG.write(json.dumps(rec)+'\n')
+              try: s.close()
+              except Exception: pass
+          ls=socket.socket(); ls.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1); ls.bind(('0.0.0.0',10452)); ls.listen(50)
+          while True:
+              c,_=ls.accept(); threading.Thread(target=handle,args=(c,),daemon=True).start()
+
+          SP_EOF
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/k3.pem -out /tmp/c3.pem -days 30 -subj "/CN=10-0-2-2.sslip.io" -addext "subjectAltName=DNS:10-0-2-2.sslip.io" 2>/dev/null
+          cat > srv.json <<'JS_EOF'
+          {"log":{"loglevel":"warning"},"inbounds":[{"port":10453,"listen":"127.0.0.1","protocol":"vless","settings":{"clients":[{"id":"11111111-2222-3333-4444-555555555555"}],"decryption":"none"},"streamSettings":{"network":"ws","wsSettings":{"path":"/p"}}}],"outbounds":[{"protocol":"freedom"}]}
+          JS_EOF
+          mkdir -p web; head -c 20000000 /dev/urandom > web/big.bin; head -c 1000 /dev/urandom | base64 | head -c 1000 > web/small.txt
+          cat > run.sh <<'SH_EOF'
+          set -x
+          ./xray-x86_64 run -c srv.json > xray.out 2>&1 &
+          python3 sniproxy.py > proxy.out 2>&1 &
+          (cd web && python3 -m http.server 8000 --bind 127.0.0.1 > ../web.out 2>&1 &)
+          sudo tcpdump -i lo -s 200 -w cap.pcap 'tcp port 10452' > tcpdump.out 2>&1 &
+          sleep 3
+          adb install -r /tmp/test-x86_64.apk 2>&1 | tee smoke/install.txt
+          python3 test.py
+          sleep 2; sudo pkill tcpdump; sleep 1
+          SH_EOF
+      - name: Run on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          disable-animations: true
+          script: bash run.sh
+      - name: Packet capture analysis
+        if: always()
+        run: |
+          sudo chmod a+r cap.pcap || true
+          echo "== TLS ClientHello SNI per TCP stream" | tee smoke/capture.txt
+          tshark -r cap.pcap -Y 'tls.handshake.type==1' -T fields -e tcp.stream -e tls.handshake.extensions_server_name 2>/dev/null | sort -n | uniq | tee -a smoke/capture.txt
+          echo "== bytes per TCP conversation (all, A to B and B to A)" | tee -a smoke/capture.txt
+          tshark -r cap.pcap -q -z conv,tcp 2>/dev/null | tee -a smoke/capture.txt
+          echo "== per stream frame bytes" | tee -a smoke/capture.txt
+          tshark -r cap.pcap -T fields -e tcp.stream -e frame.len 2>/dev/null | awk '{s[$1]+=$2} END{for(k in s) print "stream",k,"bytes",s[k]}' | sort -k2 -n | tee -a smoke/capture.txt
+      - name: Upload test output
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sni-output
+          path: |
+            smoke
+            sni-log.jsonl
+            xray.out
+            proxy.out
+          retention-days: 3

@@ -363,6 +363,7 @@ row(R.string.settings_service_clean) {
                     onClick = { if (!inspectionMode) RoutingManager.clean() },
                 )
             }
+row("routify_update") { UpdateRow() }
 row("routify_error_log") { ErrorLogRow() }
 row(R.string.settings_misc_logcat) {
                 PreferenceRow(

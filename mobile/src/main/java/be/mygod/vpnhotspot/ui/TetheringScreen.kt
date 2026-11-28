@@ -268,7 +268,9 @@ fun TetheringScreen(
                         TetheringRow(
                             icon = R.drawable.ic_router,
                             title = stringResource(R.string.title_repeater),
-                            summary = repeaterSummary(context, repeaterGroup, ifaceLookup, linkStyles),
+                            summary = if (active && repeaterGroup == null) {
+                                AnnotatedString("Starting the group... It is created again by itself if it drops.")
+                            } else repeaterSummary(context, repeaterGroup, ifaceLookup, linkStyles),
                             checked = active,
                             onClick = onConfigureRepeater,
                             onCheckedChange = toggleRepeater,

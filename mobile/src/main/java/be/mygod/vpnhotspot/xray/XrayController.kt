@@ -431,9 +431,16 @@ object XrayController {
             try {
                 var tick = 0
                 var fails = 0
+                fun restarts() = try { File(dir, "restarts").takeIf { it.exists() }?.readLines()?.size ?: 0 } catch (_: Throwable) { 0 }
+                var seenRestarts = restarts()
                 while (_running.value) {
                     Thread.sleep(3000)
                     tick++
+                    val rs = restarts()
+                    if (rs > seenRestarts) {
+                        appendLog("Xray stopped by itself and was restarted automatically (restart $rs). ${logExcerpt("xray.log")}")
+                        seenRestarts = rs
+                    }
                     if (tick % 10 == 0 && !blockOnFail) {
                         val st = try { File(dir, "state").readText().trim() } catch (_: Throwable) { "" }
                         if (st == "waiting" || st == "running") {
@@ -560,6 +567,10 @@ object XrayController {
               sleep 1
             fi
             if ! kill -0 ${'$'}(cat $d/xray.pid) 2>/dev/null; then echo failed > $d/state; exit 1; fi
+            echo ${quote(b64(superviseText(d, lib)))} | base64 -d > $d/supervise.sh
+            rm -f $d/nosup $d/restarts
+            ${'$'}S nohup sh $d/supervise.sh > $d/super.log 2>&1 &
+            echo ${'$'}! > $d/sup.pid
             iptables -w -t nat -N $CHAIN
             $direct
             iptables -w -t nat -A $CHAIN -p udp --dport 53 -j REDIRECT --to-ports $DNS_PORT
@@ -648,9 +659,37 @@ object XrayController {
         iptables -w -t nat -S PREROUTING | grep -E "$CHAIN|--to-ports $DNS_PORT" | sed 's/^-A/iptables -w -t nat -D/' | while read -r l; do sh -c "${'$'}l"; done
         iptables -w -t nat -F $CHAIN 2>/dev/null
         iptables -w -t nat -X $CHAIN 2>/dev/null
+        touch $d/nosup
+        [ -f $d/sup.pid ] && kill ${'$'}(cat $d/sup.pid) 2>/dev/null
+        rm -f $d/sup.pid
         [ -f $d/xray.pid ] && kill ${'$'}(cat $d/xray.pid) 2>/dev/null
         rm -f $d/xray.pid
-    """.trimIndent()
+    """.trimIndent() + "\n"
+
+    /**
+     * Runs as root next to Xray and starts it again whenever it is gone (crash, kill, out of memory), so the
+     * redirect rules never point at a dead port. Ends when the stop script creates the nosup file.
+     * The dollar sign is written as the section mark so Kotlin does not read the script as templates.
+     */
+    private fun superviseText(d: String, lib: String): String = """
+        cd @D@
+        while [ ! -f @D@/nosup ]; do
+          P=§(cat @D@/xray.pid 2>/dev/null)
+          if [ -z "§P" ] || ! kill -0 §P 2>/dev/null; then
+            [ -f @D@/nosup ] && break
+            echo restart >> @D@/restarts
+            echo "--- Xray stopped, restarting it" >> @D@/xray.log
+            XRAY_LOCATION_ASSET=@D@ @LIB@ run -c @D@/config.json >> @D@/xray.log 2>&1 &
+            echo §! > @D@/xray.pid
+            sleep 1
+            if ! kill -0 §(cat @D@/xray.pid) 2>/dev/null; then
+              XRAY_LOCATION_ASSET=@D@ @LINKER@ @LIB@ run -c @D@/config.json >> @D@/xray.log 2>&1 &
+              echo §! > @D@/xray.pid
+            fi
+          fi
+          sleep 3
+        done
+    """.trimIndent().replace("@D@", d).replace("@LIB@", quote(lib)).replace("@LINKER@", linker()).replace('§', '$')
 
     fun refresh() = try { refreshInner() } catch (e: Throwable) { _message.value = "Status unavailable" }
 

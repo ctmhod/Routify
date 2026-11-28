@@ -39,5 +39,5 @@ Get the latest APK from the [releases page](../../releases). Use the `universal`
 
 Routify is licensed under the [Apache License 2.0](LICENSE).
 
-It is based on [VPN Hotspot](https://github.com/Mygod/VPNHotspot) by Mygod (Apache 2.0) and uses [Xray-core](https://github.com/XTLS/Xray-core) (MPL 2.0), built unmodified from its public source. See [NOTICE](NOTICE).
+Credits and third-party licenses are in [NOTICE](NOTICE).
 

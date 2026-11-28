@@ -290,7 +290,37 @@ class RepeaterService : Service(), CoroutineScope {
     private var session: Job? = null
     private var destroyed = false
 
+    /** True once the current repeater run has had a working group; a failure before that is shown to the user as before. */
+    private var upOnce = false
+
+    /**
+     * Keeps the repeater alive: when the Wi-Fi Direct group is lost (or fails to come back), the old group is removed
+     * and a new one is created, with a growing pause. Gives up after 8 quick failures in a row, and logs every step.
+     */
+    private suspend fun runWithRecovery() {
+        upOnce = false
+        var restarts = 0
+        while (true) {
+            val channel = channel ?: return
+            val began = android.os.SystemClock.elapsedRealtime()
+            try {
+                runLifespan(channel)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (!upOnce) throw e
+                Timber.w(e)
+            }
+            if (android.os.SystemClock.elapsedRealtime() - began > 60_000) restarts = 0
+            restarts++
+            if (restarts > 8) throw StartFailure("The Wi-Fi Direct group kept dropping. Turn the Repeater off and on again.")
+            be.mygod.vpnhotspot.util.AppLog.add("repeater", "Group lost, creating it again (try $restarts)")
+            delay((3 * restarts).coerceAtMost(30).seconds)
+        }
+    }
+
     private fun updateGroup(value: WifiP2pGroup?) {
+        if (value != null) upOnce = true
         group.value = value
         value?.clientList?.let { timeoutMonitor?.onClientsChanged(it.isEmpty()) }
     }
@@ -344,7 +374,7 @@ class RepeaterService : Service(), CoroutineScope {
             try {
                 predecessor?.join()
                 active.value = true
-                channel?.let { runLifespan(it) }
+                runWithRecovery()
             } catch (_: CancellationException) {
                 // a stop, possibly while still waiting behind the barrier: unwind into settle below
             } catch (e: StartFailure) {

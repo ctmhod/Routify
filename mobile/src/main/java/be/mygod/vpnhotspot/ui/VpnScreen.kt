@@ -74,6 +74,15 @@ fun VpnScreen(hotspotIfaces: Collection<String>) {
         }
     }
     var editing by remember { mutableStateOf<Int?>(null) }
+    var adding by remember { mutableStateOf(false) }
+    if (adding) ServerEditor(
+        XrayServer(protocol = "vless", name = "", host = "", port = 443, id = "", network = "ws", security = "tls"),
+        false, isNew = true, onClose = { adding = false },
+        onSave = { made ->
+            links = (links + made.toLink()).distinct()
+            XrayController.saveLinks(links)
+            adding = false
+        })
     editing?.let { ei -> servers.getOrNull(ei)?.let { cur ->
         ServerEditor(cur, running && ei == selected, onClose = { editing = null }, onSave = { updated ->
             links = links.mapIndexed { j, l -> if (j == ei) updated.toLink() else l }
@@ -98,6 +107,7 @@ fun VpnScreen(hotspotIfaces: Collection<String>) {
                     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     text = cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString() ?: ""
                 }) { Text("Paste") }
+                OutlinedButton(onClick = { adding = true }) { Text("Enter by hand") }
                 Button(onClick = {
                     val found = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
                     val valid = found.filter { XrayServer.parse(it) != null }

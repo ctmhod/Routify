@@ -32,7 +32,7 @@ private fun Pick(label: String, value: String, options: List<String>, onPick: (S
 
 /** Edit screen for one saved server. Changes apply the next time you connect. */
 @Composable
-fun ServerEditor(start: XrayServer, inUse: Boolean, onClose: () -> Unit, onSave: (XrayServer) -> Unit) {
+fun ServerEditor(start: XrayServer, inUse: Boolean, onClose: () -> Unit, onSave: (XrayServer) -> Unit, isNew: Boolean = false) {
     var s by remember { mutableStateOf(start) }
     var port by remember { mutableStateOf(start.port.toString()) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -43,7 +43,7 @@ fun ServerEditor(start: XrayServer, inUse: Boolean, onClose: () -> Unit, onSave:
             Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = onClose) { Text("Close") }
-                    Text("Edit server (${s.protocol})", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                    Text(if (isNew) "Add server by hand" else "Edit server (${s.protocol})", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                     Button(onClick = {
                         val p = port.trim().toIntOrNull()
                         val msg = when {
@@ -60,6 +60,7 @@ fun ServerEditor(start: XrayServer, inUse: Boolean, onClose: () -> Unit, onSave:
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (inUse) Text("This server is connected. Changes apply the next time you connect.", style = MaterialTheme.typography.bodySmall)
                     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    if (isNew) Pick("Protocol", s.protocol, listOf("vless", "vmess")) { s = s.copy(protocol = it) }
                     field("Remarks", s.name, { s = s.copy(name = it) })
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         field("Address", s.host, { s = s.copy(host = it) }, Modifier.weight(2f))

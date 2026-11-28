@@ -19,8 +19,16 @@ import be.mygod.vpnhotspot.util.launchUrl
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    override fun onResume() {
+        super.onResume()
+        // After the user allowed "Install unknown apps" in Android's settings: open the installer once, straight away.
+        be.mygod.vpnhotspot.ui.UpdateController.resumeAfterPermission(this)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // New process: remove half-finished update downloads and old files (no download can be running yet).
+        if (savedInstanceState == null) Thread { try { be.mygod.vpnhotspot.ui.AppUpdater.cleanup(applicationContext) } catch (_: Throwable) { } }.start()
         val model by viewModels<ClientViewModel>()
         lifecycle.addObserver(model)
         WifiDoubleLock.ActivityListener(this)

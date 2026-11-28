@@ -14,7 +14,7 @@ The app has four tabs:
 
 1. **Tethering**: start a Wi-Fi hotspot, a temporary hotspot, or a repeater (for phones that cannot run Wi-Fi and hotspot at the same time).
 2. **Clients**: list connected devices and set a speed limit and a data limit for each one (needs root).
-3. **VPN**: paste a `vless://` or `vmess://` link and connect. Powered by Xray-core.
+3. **VPN**: paste a `vless://` or `vmess://` link, or tap **Enter by hand** and fill in Address, Port, User ID, Host, Path and SNI, then connect. Powered by Xray-core.
 4. **Settings**: theme (Auto, Dark, Light), VPN log detail, an error log with personal data hidden, and the option below.
 
 ### VPN modes

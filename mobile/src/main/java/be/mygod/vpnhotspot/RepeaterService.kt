@@ -314,6 +314,13 @@ class RepeaterService : Service(), CoroutineScope {
             if (android.os.SystemClock.elapsedRealtime() - began > 60_000) restarts = 0
             restarts++
             if (restarts > 8) throw StartFailure("The Wi-Fi Direct group kept dropping. Turn the Repeater off and on again.")
+            var pausedLogged = false
+            while (app.getSystemService(android.net.wifi.WifiManager::class.java)?.isWifiEnabled == false) {
+                if (!pausedLogged) { pausedLogged = true; be.mygod.vpnhotspot.util.AppLog.add("repeater", "Wi-Fi is off, waiting for it before creating the group again") }
+                delay(2.seconds)
+                restarts = 0
+            }
+            if (pausedLogged) be.mygod.vpnhotspot.util.AppLog.add("repeater", "Wi-Fi is back")
             be.mygod.vpnhotspot.util.AppLog.add("repeater", "Group lost, creating it again (try $restarts)")
             delay((3 * restarts).coerceAtMost(30).seconds)
         }

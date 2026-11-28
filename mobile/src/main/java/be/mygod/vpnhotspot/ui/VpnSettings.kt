@@ -155,3 +155,15 @@ fun ErrorLogRow() {
     )
 }
 
+
+@Composable
+fun VpnHealthRow() {
+    var on by remember { mutableStateOf(XrayController.keepHealthy) }
+    PreferenceSwitchRow(
+        icon = R.drawable.ic_route,
+        title = "Keep the connection healthy",
+        summary = "Checks the server every 15 seconds and reconnects if it stalls. Keeps Wi-Fi awake while connected and pauses checks when there is no network.",
+        checked = on,
+        onCheckedChange = { XrayController.keepHealthy = it; on = it },
+    )
+}

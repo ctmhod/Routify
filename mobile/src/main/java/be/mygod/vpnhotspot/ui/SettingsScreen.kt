@@ -163,6 +163,7 @@ fun SettingsScreen(snackbarHostState: SnackbarHostState) {
             PreferenceGroup(title = "VPN") {
 row("routify_vpn_cover") { VpnCoverageRow() }
 row("routify_vpn_fail") { VpnFailRow() }
+        row("routify_vpn_health") { VpnHealthRow() }
 row("routify_vpn_dns") { VpnDnsRow() }
 row("routify_insecure") { InsecureRow() }
 row("routify_vpn_log") { VpnLogRow() }

@@ -76,6 +76,39 @@ object XrayController {
         get() = prefs.getBoolean("block_on_fail", false)
         set(v) = prefs.edit().putBoolean("block_on_fail", v).apply()
 
+    /** On (default): the connection is checked every 15 s and restarted when it stalls; Wi-Fi and CPU stay awake while connected. */
+    var keepHealthy: Boolean
+        get() = prefs.getBoolean("keep_healthy", true)
+        set(v) = prefs.edit().putBoolean("keep_healthy", v).apply()
+
+    @Volatile private var lastServer: XrayServer? = null
+    private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
+    private var cpuLock: android.os.PowerManager.WakeLock? = null
+
+    @Suppress("DEPRECATION")
+    private fun holdLocks() {
+        try {
+            if (wifiLock == null) wifiLock = app.getSystemService(android.net.wifi.WifiManager::class.java)
+                .createWifiLock(android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF, "routify:conn").apply { setReferenceCounted(false) }
+            if (cpuLock == null) cpuLock = app.getSystemService(android.os.PowerManager::class.java)
+                .newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "routify:conn").apply { setReferenceCounted(false) }
+            wifiLock?.acquire(); cpuLock?.acquire()
+            appendLog("Health: Wi-Fi and CPU locks held while connected")
+        } catch (e: Throwable) { appendLog("Health: locks unavailable (${e.javaClass.simpleName})") }
+    }
+
+    private fun dropLocks() {
+        try { if (wifiLock?.isHeld == true) wifiLock?.release() } catch (_: Throwable) { }
+        try { if (cpuLock?.isHeld == true) cpuLock?.release() } catch (_: Throwable) { }
+    }
+
+    /** True when Android reports any network with internet (Wi-Fi or mobile data). */
+    private fun networkUp(): Boolean = try {
+        val cm = app.getSystemService(android.net.ConnectivityManager::class.java)
+        val c = cm.getNetworkCapabilities(cm.activeNetwork)
+        c?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+    } catch (_: Throwable) { true }
+
     @Volatile private var waitReason: String = ""
     @Volatile private var lastResolved: XrayServer? = null
 
@@ -371,6 +404,7 @@ object XrayController {
                 proxyProc = pb.start()
                 Thread.sleep(1200)
             }
+            lastServer = server
             val p = proxyProc
             if (p == null || !p.isAlive) {
                 val log = File(dir, "xray.log").takeIf { it.exists() }?.readText()?.takeLast(300) ?: ""
@@ -428,9 +462,13 @@ object XrayController {
         watching = true
         lastProblem = null
         Thread {
+            if (keepHealthy) holdLocks()
             try {
                 var tick = 0
                 var fails = 0
+                var healthFails = 0
+                var paused = false
+                val restartTimes = ArrayDeque<Long>()
                 fun restarts() = try { File(dir, "restarts").takeIf { it.exists() }?.readLines()?.size ?: 0 } catch (_: Throwable) { 0 }
                 var seenRestarts = restarts()
                 while (_running.value) {
@@ -461,6 +499,32 @@ object XrayController {
                             } else if (bad != waitReason) { waitReason = bad; refresh() }
                         }
                     }
+                    if (keepHealthy && tick % 5 == 0 && try { File(dir, "state").readText().trim() } catch (_: Throwable) { "" } == "proxy") {
+                        if (!networkUp()) {
+                            if (!paused) { paused = true; appendLog("Health: no network, checks paused until it is back") }
+                            healthFails = 0
+                        } else {
+                            if (paused) { paused = false; appendLog("Health: network is back, checking again") }
+                            val dead = proxyProc?.isAlive == false
+                            val bad = if (dead) "the engine stopped" else PhoneVpn.serverCheck(SOCKS_PORT)
+                            healthFails = if (bad.isEmpty()) 0 else healthFails + 1
+                            if (healthFails >= (if (dead) 1 else 3)) {
+                                healthFails = 0
+                                val now = android.os.SystemClock.elapsedRealtime()
+                                while (restartTimes.isNotEmpty() && now - restartTimes.first() > 600_000) restartTimes.removeFirst()
+                                val sv = lastServer
+                                if (sv == null || restartTimes.size >= 5) {
+                                    appendLog("Health: still stalled ($bad); stopped retrying after 5 restarts in 10 minutes")
+                                    _message.value = "Connected, but the server does not answer: $bad"
+                                } else {
+                                    restartTimes.addLast(now)
+                                    appendLog("Health: tunnel stalled ($bad), reconnecting (restart ${restartTimes.size})")
+                                    _message.value = "Reconnecting..."
+                                    kotlinx.coroutines.runBlocking { startProxy(sv) }
+                                }
+                            }
+                        }
+                    }
                     val log = try { File(dir, "xray.log").takeIf { it.exists() }?.readText()?.takeLast(6000) ?: "" } catch (_: Throwable) { "" }
                     val problem = diagnose(log)
                     if (problem != null && problem != lastProblem) {
@@ -469,7 +533,7 @@ object XrayController {
                         _message.value = "Connected, but " + problem
                     }
                 }
-            } catch (_: Throwable) { } finally { watching = false }
+            } catch (_: Throwable) { } finally { watching = false; dropLocks() }
         }.apply { isDaemon = true; name = "routify-xray-watch" }.start()
     }
 
